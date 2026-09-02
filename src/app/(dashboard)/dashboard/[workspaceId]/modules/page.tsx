@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Bot, Lightbulb, Search, Briefcase, Map, Cpu, Workflow, 
-  PenTool, Database, Clock, BarChart3, ArrowRight, X, Loader2, 
+  PenTool, Database, Clock, BarChart3, ShieldCheck, ArrowRight, X, Loader2, 
   ChevronDown, Sparkles
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
@@ -11,17 +11,18 @@ import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 const aiModules = [
-  { id: 1, name: "AI Transformation Companion", slug: "transformation_companion", desc: "Understands business goals, learns context, identifies opportunities & guides your transformation journey.", icon: Bot, color: "text-blue-500", bg: "bg-blue-100", format: "markdown" },
-  { id: 2, name: "AI Solution Builder", slug: "solution_builder", desc: "Recommends AI solutions, automation opportunities, tech stacks & implementation approaches.", icon: Lightbulb, color: "text-yellow-500", bg: "bg-yellow-100", format: "markdown" },
-  { id: 3, name: "Business Analysis Engine", slug: "business_analysis", desc: "Requirement discovery, process analysis, gap analysis, digital maturity assessment & future state analysis.", icon: Search, color: "text-emerald-500", bg: "bg-emerald-100", format: "markdown" },
-  { id: 4, name: "AI Business Consultant", slug: "business_consultant", desc: "Validates ideas, asks discovery questions & recommends best practices, AI adoption & technology stacks.", icon: Briefcase, color: "text-orange-500", bg: "bg-orange-100", format: "markdown" },
-  { id: 5, name: "Transformation Planner", slug: "transformation_planner", desc: "Generates transformation roadmaps for AI adoption, automation, modernization, cloud migration & more.", icon: Map, color: "text-purple-500", bg: "bg-purple-100", format: "markdown" },
-  { id: 6, name: "Solution Architecture Builder", slug: "architecture", desc: "Recommends HLD, LLD, architecture, integrations, infrastructure, cloud, security & deployment.", icon: Cpu, color: "text-indigo-500", bg: "bg-indigo-100", format: "mermaid" },
-  { id: 7, name: "Process Intelligence Designer", slug: "process_design", desc: "Creates workflows, BPMN diagrams, process maps, swimlane diagrams & optimization recommendations.", icon: Workflow, color: "text-green-500", bg: "bg-green-100", format: "mermaid" },
-  { id: 8, name: "AI UX Designer", slug: "ux_wireframe", desc: "Generates wireframes, dashboard concepts, navigation flows, user journeys & UX recommendations.", icon: PenTool, color: "text-pink-500", bg: "bg-pink-100", format: "json" },
-  { id: 9, name: "Database & Integration Designer", slug: "database_schema", desc: "Recommends ER diagrams, database schema, APIs, integration architecture & data flow diagrams.", icon: Database, color: "text-teal-500", bg: "bg-teal-100", format: "mermaid" },
-  { id: 10, name: "AI Planning Engine", slug: "planning_engine", desc: "Produces effort estimates, cost estimation, resource planning, timelines, milestones & risk prediction.", icon: Clock, color: "text-cyan-500", bg: "bg-cyan-100", format: "markdown" },
-  { id: 11, name: "Transformation Dashboard", slug: "dashboard_metrics", desc: "Tracks digital maturity, AI readiness, project health, implementation readiness & AI recommendations.", icon: BarChart3, color: "text-rose-500", bg: "bg-rose-100", format: "json" }
+  { id: "transformation_planner", name: "Transformation Planner", slug: "transformation_planner", desc: "Generates transformation roadmaps for AI adoption, automation, modernization, cloud migration & more.", icon: Map, color: "text-purple-500", bg: "bg-purple-100", format: "markdown" },
+  { id: "solution_architecture", name: "Solution Architecture Builder", slug: "solution_architecture", desc: "Recommends High-Level (HLD) & Low-Level Design (LLD), microservices, cloud infrastructure & network security.", icon: Cpu, color: "text-indigo-500", bg: "bg-indigo-100", format: "markdown" },
+  { id: "database_designer", name: "Database & Integration Designer", slug: "database_designer", desc: "Recommends ER diagrams, database schema, SQL tables, relational models, primary/foreign keys & indexing.", icon: Database, color: "text-teal-500", bg: "bg-teal-100", format: "markdown" },
+  { id: "process_intelligence", name: "Process Intelligence Designer", slug: "process_intelligence", desc: "Creates BPMN workflows, swimlane diagrams, process maps, automation triggers & optimization recommendations.", icon: Workflow, color: "text-green-500", bg: "bg-green-100", format: "markdown" },
+  { id: "ux_designer", name: "AI UX Designer", slug: "ux_designer", desc: "Generates wireframes, dashboard concepts, navigation flows, user journeys & component hierarchies.", icon: PenTool, color: "text-pink-500", bg: "bg-pink-100", format: "markdown" },
+  { id: "planning_engine", name: "AI Planning Engine", slug: "planning_engine", desc: "Produces effort estimates, story points, role planning, timelines, milestones, budget estimates & risk prediction.", icon: Clock, color: "text-cyan-500", bg: "bg-cyan-100", format: "markdown" },
+  { id: "transformation_companion", name: "AI Transformation Companion", slug: "transformation_companion", desc: "Understands business goals, learns context, identifies opportunities & guides your transformation journey.", icon: Bot, color: "text-blue-500", bg: "bg-blue-100", format: "markdown" },
+  { id: "solution_builder", name: "AI Solution Builder", slug: "solution_builder", desc: "Recommends AI solutions, automation opportunities, tech stacks & implementation approaches.", icon: Lightbulb, color: "text-yellow-500", bg: "bg-yellow-100", format: "markdown" },
+  { id: "business_analysis", name: "Business Analysis Engine", slug: "business_analysis", desc: "Requirement discovery, process analysis, gap analysis, digital maturity assessment & future state analysis.", icon: Search, color: "text-emerald-500", bg: "bg-emerald-100", format: "markdown" },
+  { id: "business_consultant", name: "AI Business Consultant", slug: "business_consultant", desc: "Validates ideas, asks discovery questions & recommends best practices, AI adoption & technology stacks.", icon: Briefcase, color: "text-orange-500", bg: "bg-orange-100", format: "markdown" },
+  { id: "transformation_dashboard", name: "Transformation Dashboard", slug: "transformation_dashboard", desc: "Tracks digital maturity, AI readiness, project health, implementation readiness & AI recommendations.", icon: BarChart3, color: "text-rose-500", bg: "bg-rose-100", format: "markdown" },
+  { id: "security_compliance", name: "Security & Compliance Guardian", slug: "security_compliance", desc: "Zero-trust architecture, regulatory compliance mapping (SOC2, HIPAA, GDPR), IAM policies & vulnerability mitigation.", icon: ShieldCheck, color: "text-violet-500", bg: "bg-violet-100", format: "markdown" }
 ];
 
 interface Project {
@@ -43,7 +44,13 @@ export default function ModulesPage() {
 
   // Per-module loading, results, and errors for true concurrency
   const [loadingModules, setLoadingModules] = useState<Record<string, boolean>>({});
-  const [moduleResults, setModuleResults] = useState<Record<string, { content: string; format: string }>>({});
+  const [moduleResults, setModuleResults] = useState<Record<string, {
+    title?: string;
+    summary?: string;
+    content: string;
+    format: string;
+    key_recommendations?: string[];
+  }>>({});
   const [moduleErrors, setModuleErrors] = useState<Record<string, string>>({});
 
   // Fetch projects for this workspace on mount
@@ -96,7 +103,7 @@ export default function ModulesPage() {
         return;
       }
 
-      // Non-blocking fetch with signal and business_context payload
+      // Non-blocking fetch with signal, dynamic module_type, and business_context payload
       const res = await fetch("http://localhost:8000/api/ai/generate", {
         method: "POST",
         headers: {
@@ -104,8 +111,8 @@ export default function ModulesPage() {
           "Authorization": `Bearer ${session.access_token}`
         },
         body: JSON.stringify({
-          module_type: slug,
           project_id: selectedProject,
+          module_type: slug,
           business_context: projectDetails
         }),
         signal: controller.signal
@@ -120,15 +127,22 @@ export default function ModulesPage() {
       const data = await res.json();
       setModuleResults(prev => ({
         ...prev,
-        [slug]: { content: data.content, format: data.format }
+        [slug]: {
+          title: data.title,
+          summary: data.summary,
+          content: data.content,
+          format: data.format || "markdown",
+          key_recommendations: data.key_recommendations || []
+        }
       }));
-    } catch (err: any) {
-      if (err.name === "AbortError") {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
         console.log(`Generation for ${slug} was cancelled.`);
         setModuleErrors(prev => ({ ...prev, [slug]: "Generation cancelled." }));
         return;
       }
-      setModuleErrors(prev => ({ ...prev, [slug]: err.message || "Network error." }));
+      const message = err instanceof Error ? err.message : "Network error.";
+      setModuleErrors(prev => ({ ...prev, [slug]: message }));
       console.error(err);
     } finally {
       // Loading state strictly tied to fetch lifecycle
@@ -258,9 +272,9 @@ export default function ModulesPage() {
                     className="w-full flex items-center justify-center py-3.5 px-4 border border-transparent shadow-lg shadow-blue-500/30 text-sm font-bold rounded-xl text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 transition-all cursor-pointer"
                   >
                     {loadingModules[activeModule.slug] ? (
-                      <><Loader2 size={18} className="animate-spin mr-2" /> Generating with Gemini AI...</>
+                      <><Loader2 size={18} className="animate-spin mr-2" /> Generating {activeModule.name}...</>
                     ) : (
-                      <><Sparkles size={18} className="mr-2" /> Generate Blueprint</>
+                      <><Sparkles size={18} className="mr-2" /> Generate {activeModule.name}</>
                     )}
                   </motion.button>
 
@@ -295,22 +309,52 @@ export default function ModulesPage() {
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden"
+                    className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden space-y-3"
                   >
-                    <div className="px-5 py-3 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                        AI Generated Output — {moduleResults[activeModule.slug].format}
-                      </span>
+                    <div className="px-5 py-3.5 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                          AI Generated Blueprint • {moduleResults[activeModule.slug].format}
+                        </span>
+                        {moduleResults[activeModule.slug].title && (
+                          <h4 className="text-base font-black text-slate-900 mt-0.5">
+                            {moduleResults[activeModule.slug].title}
+                          </h4>
+                        )}
+                      </div>
                       <button
                         onClick={() => navigator.clipboard.writeText(moduleResults[activeModule.slug].content)}
-                        className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors"
+                        className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs"
                       >
-                        Copy
+                        Copy Blueprint
                       </button>
                     </div>
-                    <pre className="p-5 text-sm text-slate-800 whitespace-pre-wrap overflow-x-auto max-h-[400px] overflow-y-auto leading-relaxed font-mono">
-                      {moduleResults[activeModule.slug].content}
-                    </pre>
+
+                    {moduleResults[activeModule.slug].summary && (
+                      <div className="mx-5 p-3.5 bg-blue-50/70 border border-blue-100 rounded-xl text-xs text-blue-900 leading-relaxed">
+                        <span className="font-bold text-blue-700 uppercase tracking-wider text-[10px] block mb-1">Executive Summary</span>
+                        {moduleResults[activeModule.slug].summary}
+                      </div>
+                    )}
+
+                    {moduleResults[activeModule.slug].key_recommendations && moduleResults[activeModule.slug].key_recommendations!.length > 0 && (
+                      <div className="mx-5">
+                        <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px] block mb-1.5">Key Recommendations</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {moduleResults[activeModule.slug].key_recommendations!.map((rec, idx) => (
+                            <span key={idx} className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-700 shadow-2xs">
+                              • {rec}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="px-5 pb-5">
+                      <pre className="p-4 text-sm text-slate-800 whitespace-pre-wrap overflow-x-auto max-h-[400px] overflow-y-auto leading-relaxed font-mono bg-white rounded-xl border border-slate-200">
+                        {moduleResults[activeModule.slug].content}
+                      </pre>
+                    </div>
                   </motion.div>
                 )}
               </div>

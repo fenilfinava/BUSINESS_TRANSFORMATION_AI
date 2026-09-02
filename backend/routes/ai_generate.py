@@ -49,65 +49,70 @@ class AIGenerateRequest(BaseModel):
 class AIGenerateResponse(BaseModel):
     module_type: str
     content: str
-    format: str  # 'markdown', 'mermaid', 'json'
+    format: str = "markdown"
+    title: Optional[str] = None
+    summary: Optional[str] = None
+    key_recommendations: Optional[list[str]] = None
 
-# --- Module-Specific Prompt Templates ---
-MODULE_PROMPTS = {
-    "transformation_companion": {
-        "system": "You are an AI Transformation Companion. Analyze the business context and identify digital transformation opportunities.",
-        "task": "Based on the following business context, identify the top 5 transformation opportunities, potential ROI, and recommended priority order. Provide actionable insights.",
-        "format": "markdown"
-    },
-    "solution_builder": {
-        "system": "You are an AI Solution Builder specializing in enterprise technology recommendations.",
-        "task": "Based on the following business context, recommend AI solutions, automation opportunities, technology stacks, and implementation approaches. Be specific with product/tool names.",
-        "format": "markdown"
-    },
-    "business_analysis": {
-        "system": "You are a Business Analysis Engine for enterprise transformation.",
-        "task": "Perform a comprehensive business analysis including: requirement discovery, process analysis, gap analysis, digital maturity assessment, and future state analysis. Present findings in structured sections.",
-        "format": "markdown"
-    },
-    "business_consultant": {
-        "system": "You are an AI Business Consultant with expertise in digital transformation.",
-        "task": "Validate the business ideas, ask critical discovery questions, and recommend best practices for AI adoption and technology stack selection. Provide a structured consultation report.",
-        "format": "markdown"
-    },
-    "transformation_planner": {
-        "system": "You are a Transformation Planner specializing in roadmap generation.",
-        "task": "Generate a detailed transformation roadmap with phases, milestones, timelines, and deliverables. Include risk mitigation strategies for each phase.",
-        "format": "markdown"
-    },
-    "architecture": {
-        "system": "You are a Solution Architecture Builder for enterprise systems.",
-        "task": "Design a high-level architecture (HLD) for the system described below. Include: system components, data flow, cloud infrastructure recommendations, security layers, and integration points. Output as a Mermaid diagram using `graph TB` syntax.",
-        "format": "mermaid"
-    },
-    "process_design": {
-        "system": "You are a Process Intelligence Designer specializing in business workflows.",
-        "task": "Create a detailed BPMN-style workflow diagram for the key business processes described below. Use Mermaid `graph TD` syntax with subgraphs for swimlanes. Include decision points and error handling.",
-        "format": "mermaid"
-    },
-    "ux_wireframe": {
-        "system": "You are an AI UX Designer for enterprise applications.",
-        "task": "Design wireframe concepts for the application described below. Describe each screen with: layout type, key components, navigation flow, and user interaction patterns. Output as structured JSON with screens array.",
-        "format": "json"
-    },
-    "database_schema": {
-        "system": "You are a Database & Integration Designer for enterprise systems.",
-        "task": "Design a comprehensive database schema (ER diagram) for the system described below. Include all entities, relationships, primary/foreign keys, and data types. Output as a Mermaid `erDiagram` syntax.",
-        "format": "mermaid"
-    },
-    "planning_engine": {
-        "system": "You are an AI Planning Engine for project estimation.",
-        "task": "Produce detailed effort estimates including: phases, activities, roles needed, estimated hours, complexity ratings, total timeline, and cost estimation. Present as a markdown table.",
-        "format": "markdown"
-    },
-    "dashboard_metrics": {
-        "system": "You are a Transformation Dashboard analytics engine.",
-        "task": "Based on the business context, generate key transformation metrics including: AI readiness score (0-100), digital maturity score (0-100), risk level, estimated ROI timeline, and recommended KPIs. Output as a JSON object.",
-        "format": "json"
-    }
+# --- Specialized Module Instructions ---
+MODULE_INSTRUCTIONS = {
+    "solution_architecture": (
+        "Output High-Level Design (HLD) & Low-Level Design (LLD), microservices breakdown, "
+        "cloud infrastructure (AWS/GCP/Azure), network security layers, API gateway patterns, and end-to-end data flow diagrams."
+    ),
+    "database_designer": (
+        "Output an ER diagram structure, complete SQL/PostgreSQL table definitions with primary and foreign keys, "
+        "relational schemas, indexing strategy, partition suggestions, and data integrity constraints."
+    ),
+    "process_intelligence": (
+        "Output BPMN workflow stages, actor swimlanes, automation trigger points, exception handling paths, "
+        "and event-driven API integration steps."
+    ),
+    "ux_designer": (
+        "Output page wireframe hierarchies, component breakdowns, navigation flowcharts, design system recommendations, "
+        "and user journey personas."
+    ),
+    "transformation_planner": (
+        "Output multi-phase implementation roadmaps, milestone timelines with estimated quarters, compliance baselines, "
+        "resource allocation, and risk mitigation matrices."
+    ),
+    "planning_engine": (
+        "Output comprehensive effort estimates (story points and hours), resource role planning, sprint breakdown, "
+        "budget and licensing cost estimates, and risk prediction."
+    ),
+    "transformation_companion": (
+        "Provide strategic executive advisory on digital transformation opportunities, organizational change management, "
+        "phased digital adoption, and competitive positioning."
+    ),
+    "solution_builder": (
+        "Recommend specific cutting-edge AI solutions, automation opportunities, technology stack choices (frontend, backend, AI/ML), "
+        "and pragmatic implementation approaches."
+    ),
+    "business_analysis": (
+        "Perform comprehensive requirement discovery, existing process analysis, gap analysis, digital maturity assessment, "
+        "and future state operational modeling."
+    ),
+    "business_consultant": (
+        "Validate core business ideas, ask critical discovery questions, benchmark industry best practices, "
+        "and formulate strategic AI adoption frameworks."
+    ),
+    "transformation_dashboard": (
+        "Define transformation KPIs, digital maturity scoring (0-100), AI readiness indicators, ROI realization schedules, "
+        "and executive health scorecards."
+    ),
+    "security_compliance": (
+        "Formulate zero-trust architecture, regulatory compliance mapping (SOC2, GDPR, HIPAA, ISO27001), "
+        "IAM role definitions, vulnerability mitigation policies, and audit logging standards."
+    )
+}
+
+# Aliases for backwards compatibility
+MODULE_ALIASES = {
+    "architecture": "solution_architecture",
+    "database_schema": "database_designer",
+    "process_design": "process_intelligence",
+    "ux_wireframe": "ux_designer",
+    "dashboard_metrics": "transformation_dashboard"
 }
 
 
@@ -115,7 +120,7 @@ MODULE_PROMPTS = {
 async def generate_ai_content(request: AIGenerateRequest, user_id: str = Depends(get_current_user)):
     """
     Universal AI generation endpoint.
-    Fetches project context, constructs module-specific prompt, calls Gemini, saves blueprint.
+    Routes to specialized Gemini prompts per module_type, parses structured JSON, and saves blueprint.
     """
     if not gemini_model:
         raise HTTPException(
@@ -123,51 +128,36 @@ async def generate_ai_content(request: AIGenerateRequest, user_id: str = Depends
             detail=gemini_error or "Gemini AI is not configured. Check GEMINI_API_KEY."
         )
 
-    # 1. Validate module_type
-    module_config = MODULE_PROMPTS.get(request.module_type)
-    if not module_config:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Unknown module_type '{request.module_type}'. Valid types: {list(MODULE_PROMPTS.keys())}"
-        )
+    # 1. Resolve module_type and specialized instructions
+    resolved_module = MODULE_ALIASES.get(request.module_type, request.module_type)
+    specialized_instructions = MODULE_INSTRUCTIONS.get(
+        resolved_module,
+        f"Generate a comprehensive, actionable technical and business blueprint for {resolved_module}."
+    )
 
-    # 2. Fetch project context from Supabase
-    project = await get_project(request.project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail=f"Project '{request.project_id}' not found.")
+    # 2. Construct the strict prompt dynamically
+    prompt = f"""You are an expert enterprise systems architect.
+Task: Generate a comprehensive blueprint for the module: '{resolved_module}'.
+Specialized Instructions:
+{specialized_instructions}
 
-    project_name = project.get("name", "Untitled Project")
-    project_desc = project.get("description", "No description provided.")
-    project_context = project.get("context_description", "")
+Business Context: {request.business_context}
 
-    business_context = f"""
-Project Name: {project_name}
-Description: {project_desc}
-Business Context: {project_context if project_context else project_desc}
+Format Requirement: Output valid JSON containing:
+{{
+  "module_type": "{resolved_module}",
+  "title": "A descriptive, professional title for this blueprint",
+  "summary": "Executive summary of the blueprint (2-3 sentences)",
+  "content": "Markdown-formatted detailed blueprint including all technical specifications, diagrams, and step-by-step guidance...",
+  "key_recommendations": ["Recommendation 1", "Recommendation 2", "Recommendation 3", "Recommendation 4"]
+}}
 """
 
-    # 3. Construct the prompt utilizing request.business_context
-    full_prompt = f"""You are an expert system architect. Generate a {request.module_type} blueprint for the following business: {request.business_context}. Output strictly in JSON format.
-
-Role Instructions:
-{module_config['system']}
-{module_config['task']}
-
-Target output format details: {module_config['format']}
-
-Output JSON structure must have the following keys:
-- "module_type": "{request.module_type}"
-- "title": A descriptive title for this blueprint
-- "summary": A high-level executive summary
-- "content": The primary generated output (markdown, mermaid diagram, or data)
-- "key_recommendations": A list of top recommendations
-"""
-
-    # 4. Call Gemini Asynchronously
+    # 3. Call Gemini Asynchronously
     try:
-        print(f"🤖 Calling Gemini for module '{request.module_type}' on project '{request.project_id}'...")
+        print(f"🤖 Calling Gemini for module '{resolved_module}' on project '{request.project_id}'...")
         response = await gemini_model.generate_content_async(
-            full_prompt,
+            prompt,
             generation_config=genai.GenerationConfig(
                 response_mime_type="application/json",
             )
@@ -178,22 +168,53 @@ Output JSON structure must have the following keys:
         print(f"❌ Gemini API error: {str(e)}")
         raise HTTPException(status_code=502, detail=f"Gemini API error: {str(e)}")
 
-    # 5. Save to blueprints table
-    blueprint_data = {
-        "format": module_config["format"],
-        "content": generated_text
+    # 4. Parse JSON output
+    try:
+        parsed_data = json.loads(generated_text)
+    except Exception:
+        import re
+        cleaned = re.sub(r"^```json\s*", "", generated_text.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        try:
+            parsed_data = json.loads(cleaned)
+        except Exception:
+            parsed_data = {
+                "module_type": resolved_module,
+                "title": f"{resolved_module.replace('_', ' ').title()} Blueprint",
+                "summary": "AI Generated Blueprint for Enterprise Transformation",
+                "content": generated_text,
+                "key_recommendations": []
+            }
+
+    content_markdown = parsed_data.get("content", generated_text)
+    title = parsed_data.get("title", f"{resolved_module.replace('_', ' ').title()} Blueprint")
+    summary = parsed_data.get("summary", "")
+    key_recommendations = parsed_data.get("key_recommendations", [])
+    if not isinstance(key_recommendations, list):
+        key_recommendations = [str(key_recommendations)]
+
+    # 5. Save to blueprints table in Supabase
+    blueprint_payload = {
+        "format": "markdown",
+        "title": title,
+        "summary": summary,
+        "content": content_markdown,
+        "key_recommendations": key_recommendations
     }
     try:
-        await save_blueprint(request.project_id, request.module_type, blueprint_data)
-        print(f"💾 Blueprint saved for module '{request.module_type}'")
+        await save_blueprint(request.project_id, resolved_module, blueprint_payload)
+        print(f"💾 Blueprint saved for module '{resolved_module}'")
     except Exception as e:
         print(f"⚠️ Failed to save blueprint (non-fatal): {str(e)}")
 
-    # 6. Return to frontend
+    # 6. Return parsed response directly to the client
     return AIGenerateResponse(
-        module_type=request.module_type,
-        content=generated_text,
-        format=module_config["format"]
+        module_type=resolved_module,
+        title=title,
+        summary=summary,
+        content=content_markdown,
+        key_recommendations=key_recommendations,
+        format="markdown"
     )
 
 
