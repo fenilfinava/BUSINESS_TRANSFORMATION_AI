@@ -3,7 +3,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, usePathname } from "next/navigation";
-import { LayoutDashboard, FolderKanban, Settings, Users, LogOut, Zap } from "lucide-react";
+import { LayoutDashboard, FolderKanban, Settings, Users, LogOut, Zap, History } from "lucide-react";
 import { PageTransition } from "@/components/common/PageTransition";
 import { supabase } from "@/lib/supabase";
 
@@ -112,6 +112,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             { name: "Dashboard", href: `/dashboard/${currentWsId}`, exact: true, icon: LayoutDashboard, iconColor: "text-blue-400" },
             { name: "AI Modules", href: `/dashboard/${currentWsId}/modules`, exact: false, icon: Zap, iconColor: "text-yellow-400" },
             { name: "Projects", href: `/dashboard/${currentWsId}/projects`, exact: false, icon: FolderKanban, iconColor: "text-purple-400" },
+            { name: "History", href: `/dashboard/${currentWsId}/history`, exact: false, icon: History, iconColor: "text-indigo-400" },
             { name: "Team", href: `/dashboard/${currentWsId}/team`, exact: false, icon: Users, iconColor: "text-emerald-400" },
           ].map((link) => {
             const isActive = link.exact 

@@ -4,10 +4,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Bot, Lightbulb, Search, Briefcase, Map, Cpu, Workflow, 
   PenTool, Database, Clock, BarChart3, ShieldCheck, ArrowRight, X, Loader2, 
-  ChevronDown, Sparkles
+  ChevronDown, Sparkles, History, RotateCcw, Calendar
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 const aiModules = [
@@ -29,6 +30,16 @@ interface Project {
   id: string;
   name: string;
   description?: string;
+}
+
+interface BlueprintVersion {
+  id: string;
+  created_at: string;
+  title: string;
+  summary: string;
+  content: string;
+  format: string;
+  key_recommendations: string[];
 }
 
 export default function ModulesPage() {
@@ -53,6 +64,11 @@ export default function ModulesPage() {
   }>>({});
   const [moduleErrors, setModuleErrors] = useState<Record<string, string>>({});
 
+  // Phase 4: Version history states per module
+  const [moduleVersions, setModuleVersions] = useState<Record<string, BlueprintVersion[]>>({});
+  const [selectedVersionId, setSelectedVersionId] = useState<Record<string, string>>({});
+  const [loadingVersions, setLoadingVersions] = useState<Record<string, boolean>>({});
+
   // Fetch projects for this workspace on mount
   useEffect(() => {
     async function loadProjects() {
@@ -73,6 +89,103 @@ export default function ModulesPage() {
     }
     loadProjects();
   }, [workspaceId]);
+
+  // Load versions for a specific module & project
+  const loadVersionsForModule = async (slug: string, projectId: string) => {
+    if (!slug || !projectId) return;
+    setLoadingVersions(prev => ({ ...prev, [slug]: true }));
+    try {
+      const { data, error } = await supabase
+        .from('blueprints')
+        .select('id, module_type, module_name, generated_content, data, created_at')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error("Error loading blueprint versions:", error);
+        return;
+      }
+
+      const currentModuleMeta = aiModules.find(m => m.slug === slug);
+      const targetSlug = slug.toLowerCase();
+      const targetName = (currentModuleMeta?.name || "").toLowerCase();
+
+      const matching = (data || []).filter((row: any) => {
+        const type = (row.module_type || row.module_name || "").toLowerCase();
+        return type === targetSlug || type === targetName;
+      });
+
+      const parsed: BlueprintVersion[] = matching.map((row: any) => {
+        const contentObj = row.generated_content || row.data || {};
+        return {
+          id: row.id,
+          created_at: row.created_at,
+          title: contentObj.title || `${currentModuleMeta?.name || "Blueprint"} Version`,
+          summary: contentObj.summary || "",
+          content: typeof contentObj === "string" ? contentObj : (contentObj.content || JSON.stringify(contentObj, null, 2)),
+          format: contentObj.format || "markdown",
+          key_recommendations: Array.isArray(contentObj.key_recommendations) ? contentObj.key_recommendations : []
+        };
+      });
+
+      setModuleVersions(prev => ({ ...prev, [slug]: parsed }));
+
+      if (parsed.length > 0) {
+        // Default to newest if not yet selected
+        setSelectedVersionId(prev => {
+          const currentId = prev[slug];
+          const exists = parsed.some(p => p.id === currentId);
+          return { ...prev, [slug]: exists ? currentId : parsed[0].id };
+        });
+
+        // If no active result displayed yet, show newest version
+        setModuleResults(prev => {
+          if (!prev[slug]) {
+            return {
+              ...prev,
+              [slug]: {
+                title: parsed[0].title,
+                summary: parsed[0].summary,
+                content: parsed[0].content,
+                format: parsed[0].format,
+                key_recommendations: parsed[0].key_recommendations
+              }
+            };
+          }
+          return prev;
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load versions:", err);
+    } finally {
+      setLoadingVersions(prev => ({ ...prev, [slug]: false }));
+    }
+  };
+
+  // Automatically fetch version history when active module or selected project changes
+  useEffect(() => {
+    if (activeModule && selectedProject) {
+      loadVersionsForModule(activeModule.slug, selectedProject);
+    }
+  }, [activeModule?.slug, selectedProject]);
+
+  const handleSelectVersion = (slug: string, versionId: string) => {
+    const versions = moduleVersions[slug] || [];
+    const selected = versions.find(v => v.id === versionId);
+    if (selected) {
+      setSelectedVersionId(prev => ({ ...prev, [slug]: versionId }));
+      setModuleResults(prev => ({
+        ...prev,
+        [slug]: {
+          title: selected.title,
+          summary: selected.summary,
+          content: selected.content,
+          format: selected.format,
+          key_recommendations: selected.key_recommendations
+        }
+      }));
+    }
+  };
 
   const handleLaunchModule = (mod: typeof aiModules[0]) => {
     setActiveModule(mod);
@@ -135,6 +248,9 @@ export default function ModulesPage() {
           key_recommendations: data.key_recommendations || []
         }
       }));
+
+      // Reload versions so the new generation is recorded in the dropdown immediately
+      await loadVersionsForModule(slug, selectedProject);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") {
         console.log(`Generation for ${slug} was cancelled.`);
@@ -262,7 +378,61 @@ export default function ModulesPage() {
                   )}
                 </div>
 
-                {/* Generate Button & Cancel Action */}
+                {/* Phase 4: Version History Dropdown */}
+                {activeModule && (moduleVersions[activeModule.slug]?.length ?? 0) > 0 && (
+                  <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 flex-shrink-0">
+                        <History size={18} />
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700">Version History</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-200/70 text-indigo-800">
+                            {moduleVersions[activeModule.slug].length} {moduleVersions[activeModule.slug].length === 1 ? 'generation' : 'generations'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 mt-0.5">
+                          {selectedVersionId[activeModule.slug] === moduleVersions[activeModule.slug][0]?.id
+                            ? "Displaying latest version"
+                            : "Viewing previous version (swap dates below)"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <div className="relative flex-1 sm:flex-initial">
+                        <select
+                          value={selectedVersionId[activeModule.slug] || moduleVersions[activeModule.slug][0]?.id}
+                          onChange={(e) => handleSelectVersion(activeModule.slug, e.target.value)}
+                          className="w-full sm:w-auto pl-3 pr-8 py-2 rounded-xl border border-indigo-200 bg-white text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer appearance-none shadow-2xs"
+                        >
+                          {moduleVersions[activeModule.slug].map((ver, idx) => {
+                            const date = new Date(ver.created_at);
+                            const isLatest = idx === 0;
+                            const label = `${isLatest ? "★ Latest • " : `v${moduleVersions[activeModule.slug].length - idx} • `}${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
+                            return (
+                              <option key={ver.id} value={ver.id}>
+                                {label}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      </div>
+
+                      <Link 
+                        href={`/dashboard/${workspaceId}/history`}
+                        title="View Full History Log"
+                        className="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded-xl transition-colors flex-shrink-0"
+                      >
+                        <ArrowRight size={16} />
+                      </Link>
+                    </div>
+                  </div>
+                )}
+
+                {/* Generate / Regenerate Button & Cancel Action */}
                 <div className="space-y-2.5">
                   <motion.button
                     whileHover={{ scale: 1.02 }}
@@ -273,6 +443,8 @@ export default function ModulesPage() {
                   >
                     {loadingModules[activeModule.slug] ? (
                       <><Loader2 size={18} className="animate-spin mr-2" /> Generating {activeModule.name}...</>
+                    ) : (moduleVersions[activeModule.slug]?.length ?? 0) > 0 ? (
+                      <><Sparkles size={18} className="mr-2" /> Regenerate {activeModule.name} (Saves New Version)</>
                     ) : (
                       <><Sparkles size={18} className="mr-2" /> Generate {activeModule.name}</>
                     )}
@@ -313,9 +485,16 @@ export default function ModulesPage() {
                   >
                     <div className="px-5 py-3.5 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between">
                       <div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                          AI Generated Blueprint • {moduleResults[activeModule.slug].format}
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                            AI Generated Blueprint • {moduleResults[activeModule.slug].format}
+                          </span>
+                          {selectedVersionId[activeModule.slug] && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                              {selectedVersionId[activeModule.slug] === moduleVersions[activeModule.slug]?.[0]?.id ? "Latest" : "Historical"}
+                            </span>
+                          )}
+                        </div>
                         {moduleResults[activeModule.slug].title && (
                           <h4 className="text-base font-black text-slate-900 mt-0.5">
                             {moduleResults[activeModule.slug].title}
@@ -324,7 +503,7 @@ export default function ModulesPage() {
                       </div>
                       <button
                         onClick={() => navigator.clipboard.writeText(moduleResults[activeModule.slug].content)}
-                        className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs"
+                        className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs cursor-pointer"
                       >
                         Copy Blueprint
                       </button>

@@ -108,18 +108,40 @@ async def create_project(data: Dict[str, Any]) -> Dict[str, Any]:
         print(f"Error creating project: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create project: {e}")
 
-async def save_blueprint(project_id: str, module_name: str, data: Dict[str, Any]) -> None:
+async def save_blueprint(project_id: str, module_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
     client = get_supabase_client()
     try:
-        payload = {"project_id": project_id, "module_name": module_name, "data": data}
-        client.table("blueprints").insert(payload).execute()
+        # Phase 1 & 2: Append-only insert with modern and legacy field coverage
+        payload = {
+            "project_id": project_id,
+            "module_type": module_type,
+            "module_name": module_type,
+            "generated_content": data,
+            "data": data,
+        }
+        res = client.table("blueprints").insert(payload).execute()
+        return res.data[0] if res.data else {}
     except Exception as e:
-        print(f"Error saving blueprint: {e}")
+        # Fallback if module_type / generated_content column migration is pending
+        try:
+            legacy_payload = {
+                "project_id": project_id,
+                "module_name": module_type,
+                "data": data
+            }
+            res = client.table("blueprints").insert(legacy_payload).execute()
+            return res.data[0] if res.data else {}
+        except Exception as e2:
+            print(f"Error saving blueprint: {e2}")
+            raise e2
 
-async def get_blueprints(project_id: str) -> List[Dict[str, Any]]:
+async def get_blueprints(project_id: str, module_type: Optional[str] = None) -> List[Dict[str, Any]]:
     client = get_supabase_client()
     try:
-        response = client.table("blueprints").select("*").eq("project_id", project_id).execute()
+        query = client.table("blueprints").select("*").eq("project_id", project_id)
+        if module_type:
+            query = query.or_(f"module_type.eq.{module_type},module_name.eq.{module_type}")
+        response = query.order("created_at", desc=True).execute()
         return response.data or []
     except Exception as e:
         print(f"Error fetching blueprints: {e}")

@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional
-from database import get_current_user, get_supabase_client, save_blueprint, get_project
-from config import settings
+from typing import Optional, List, Dict, Any
+from database import get_current_user, get_supabase_client, save_blueprint, get_project, get_blueprints
 import os
 import json
 
@@ -218,12 +217,39 @@ Format Requirement: Output valid JSON containing:
     )
 
 
+def normalize_blueprint(b: Dict[str, Any]) -> Dict[str, Any]:
+    content = b.get("generated_content") or b.get("data") or {}
+    return {
+        "id": b.get("id"),
+        "project_id": b.get("project_id"),
+        "module_type": b.get("module_type") or b.get("module_name") or "",
+        "module_name": b.get("module_name") or b.get("module_type") or "",
+        "generated_content": content,
+        "data": content,
+        "created_at": b.get("created_at")
+    }
+
+
 @router.get("/blueprints/{project_id}")
-async def get_project_blueprints(project_id: str, user_id: str = Depends(get_current_user)):
-    """Fetch all saved blueprints for a project."""
-    client = get_supabase_client()
-    try:
-        response = client.table("blueprints").select("*").eq("project_id", project_id).order("created_at", desc=True).execute()
-        return response.data or []
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch blueprints: {str(e)}")
+async def get_project_blueprints(
+    project_id: str,
+    module_type: Optional[str] = None,
+    user_id: str = Depends(get_current_user)
+):
+    """Fetch all saved blueprints (version history) for a project, optionally filtered by module."""
+    raw_blueprints = await get_blueprints(project_id, module_type)
+    return [normalize_blueprint(b) for b in raw_blueprints]
+
+
+@router.get("/blueprints/{project_id}/latest")
+async def get_latest_blueprint(
+    project_id: str,
+    module_type: str,
+    user_id: str = Depends(get_current_user)
+):
+    """Fetch the latest blueprint for a project module."""
+    raw_blueprints = await get_blueprints(project_id, module_type)
+    if not raw_blueprints:
+        raise HTTPException(status_code=404, detail="No blueprint found for this module.")
+    return normalize_blueprint(raw_blueprints[0])
+
