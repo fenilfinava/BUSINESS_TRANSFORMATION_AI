@@ -1,0 +1,182 @@
+"use client";
+
+import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowRight, Sparkles, X, Plus } from 'lucide-react';
+import { AnimatedBackground } from '@/components/common/AnimatedBackground';
+import { useState } from 'react';
+
+export default function WorkspacesPage() {
+  const [workspaces, setWorkspaces] = useState([
+    { id: '1', name: 'Acme Corp', role: 'Admin', icon: '🏢', color: 'from-blue-500 to-indigo-600' },
+    { id: '2', name: 'Global Tech', role: 'Analyst', icon: '🌐', color: 'from-emerald-400 to-teal-500' },
+  ]);
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newWsName, setNewWsName] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+
+  const handleCreate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newWsName.trim()) return;
+    
+    setIsCreating(true);
+    setTimeout(() => {
+      setWorkspaces([...workspaces, {
+        id: Date.now().toString(),
+        name: newWsName,
+        role: 'Admin',
+        icon: '🚀',
+        color: 'from-purple-500 to-pink-600'
+      }]);
+      setIsCreating(false);
+      setIsModalOpen(false);
+      setNewWsName("");
+    }, 1000);
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-8 relative overflow-hidden">
+      <AnimatedBackground />
+
+      <div className="max-w-5xl w-full mx-auto relative z-10">
+        <div className="text-center mb-16">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", bounce: 0.5 }}
+            className="inline-flex items-center justify-center p-3 bg-white/70 rounded-2xl mb-6 backdrop-blur-md border border-slate-200 shadow-xl shadow-blue-500/10"
+          >
+            <Sparkles className="text-blue-600 w-8 h-8" />
+          </motion.div>
+          <motion.h1 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-5xl md:text-6xl font-black text-slate-900 tracking-tight"
+          >
+            Select Workspace
+          </motion.h1>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="mt-4 text-slate-500 text-lg max-w-xl mx-auto"
+          >
+            Choose a workspace to continue or create a new one to start your transformation journey.
+          </motion.p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {workspaces.map((ws, i) => (
+            <Link key={ws.id} href={`/dashboard/${ws.id}`} passHref className="block h-full">
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.15, type: "spring", stiffness: 300, damping: 20 }}
+                whileHover={{ y: -10, scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                className="h-full bg-white/70 backdrop-blur-xl p-8 rounded-3xl border border-white shadow-xl shadow-slate-200/50 group relative overflow-hidden flex flex-col justify-between"
+              >
+                <div className={`absolute inset-0 bg-gradient-to-br ${ws.color} opacity-0 group-hover:opacity-[0.05] transition-opacity duration-500`} />
+                
+                {/* Shimmer sweep effect */}
+                <motion.div 
+                  animate={{ x: ['-200%', '300%'] }}
+                  transition={{ duration: 3.5, repeat: Infinity, ease: "linear", repeatDelay: 2 + i }}
+                  className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/50 to-transparent -skew-x-12 z-0"
+                />
+                
+                <div className="relative z-10">
+                  <div className="text-4xl mb-6 bg-white w-16 h-16 flex items-center justify-center rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden group-hover:shadow-md transition-shadow">
+                    <span className="relative z-10">{ws.icon}</span>
+                    <div className={`absolute inset-0 bg-gradient-to-br ${ws.color} opacity-0 group-hover:opacity-10 transition-opacity`} />
+                  </div>
+                  <h2 className="text-2xl font-bold text-slate-900 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-indigo-600 transition-all">{ws.name}</h2>
+                  <div className="mt-4 inline-flex items-center space-x-2 bg-slate-50/80 px-3 py-1.5 rounded-full border border-slate-200/50 backdrop-blur-sm">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-[pulse_2s_ease-in-out_infinite]" />
+                    <span className="text-sm text-slate-600 font-bold tracking-wide">{ws.role}</span>
+                  </div>
+                </div>
+
+                <div className="mt-8 flex items-center text-blue-600 font-bold group-hover:translate-x-2 transition-transform relative z-10">
+                  Enter Workspace <ArrowRight size={18} className="ml-2 group-hover:animate-pulse" />
+                </div>
+              </motion.div>
+            </Link>
+          ))}
+          
+          <motion.button 
+            onClick={() => setIsModalOpen(true)}
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: workspaces.length * 0.15, type: "spring", stiffness: 300, damping: 20 }}
+            whileHover={{ y: -10, scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            className="w-full text-left bg-white/40 backdrop-blur-xl p-8 rounded-3xl border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 transition-all text-slate-600 group flex flex-col items-center justify-center min-h-[250px] cursor-pointer"
+          >
+            <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center mb-4 border border-slate-200 group-hover:border-blue-200 transition-colors shadow-sm group-hover:shadow-blue-500/25">
+              <Plus className="text-slate-400 group-hover:text-blue-500 transition-colors w-8 h-8" />
+            </div>
+            <span className="text-lg font-bold text-slate-700 tracking-wide">New Workspace</span>
+            <span className="text-sm mt-2 text-slate-500 group-hover:text-blue-600 transition-colors text-center">Set up a new organization</span>
+          </motion.button>
+        </div>
+      </div>
+
+      {/* New Workspace Modal */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40"
+              onClick={() => setIsModalOpen(false)}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-3xl shadow-2xl z-50 overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h3 className="text-xl font-bold text-slate-900">Create Workspace</h3>
+                <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition-colors cursor-pointer">
+                  <X size={20} />
+                </button>
+              </div>
+              <form onSubmit={handleCreate} className="p-8">
+                <div className="mb-8">
+                  <label className="block text-sm font-bold text-slate-700 mb-2">Workspace Name</label>
+                  <input 
+                    autoFocus
+                    type="text" 
+                    value={newWsName}
+                    onChange={e => setNewWsName(e.target.value)}
+                    placeholder="e.g. Stark Industries" 
+                    className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-slate-900"
+                    required
+                  />
+                </div>
+                <motion.button 
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  disabled={isCreating || !newWsName.trim()}
+                  type="submit"
+                  className="w-full flex items-center justify-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-8 py-3.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/30 disabled:opacity-70 cursor-pointer"
+                >
+                  {isCreating ? (
+                    <><div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" /> Creating...</>
+                  ) : (
+                    "Create Workspace"
+                  )}
+                </motion.button>
+              </form>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
