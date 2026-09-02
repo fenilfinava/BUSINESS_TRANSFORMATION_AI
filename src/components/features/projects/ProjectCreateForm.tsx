@@ -40,14 +40,56 @@ export function ProjectCreateForm({ workspaceId }: { workspaceId: string }) {
       // Resolve a real workspace UUID if a placeholder or invalid ID was passed
       let targetWsId = workspaceId;
       if (!isValidUUID(targetWsId)) {
-        const { data: wsData } = await supabase.from('workspaces').select('id').limit(1);
+        // 1. Try Supabase
+        const { data: wsData } = await supabase.from('workspaces').select('id').order('created_at', { ascending: false }).limit(1);
         if (wsData && wsData.length > 0 && isValidUUID(wsData[0].id)) {
           targetWsId = wsData[0].id;
         } else {
-          alert("Please create or select a valid workspace first before creating a project.");
-          setIsLoading(false);
-          return;
+          // 2. Try backend workspaces endpoint
+          try {
+            const wsRes = await fetch('http://localhost:8000/api/workspaces', {
+              headers: { 'Authorization': session ? `Bearer ${session.access_token}` : '' }
+            });
+            if (wsRes.ok) {
+              const wsList = await wsRes.json();
+              if (wsList && wsList.length > 0 && isValidUUID(wsList[0].id)) {
+                targetWsId = wsList[0].id;
+              }
+            }
+          } catch (e) {
+            console.warn("Could not list workspaces via backend:", e);
+          }
+
+          // 3. Auto-initialize default workspace if none exists
+          if (!isValidUUID(targetWsId)) {
+            try {
+              console.log("Auto-initializing default workspace...");
+              const createWsRes = await fetch('http://localhost:8000/api/workspaces', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': session ? `Bearer ${session.access_token}` : ''
+                },
+                body: JSON.stringify({ name: "Default Transformation Workspace" })
+              });
+              if (createWsRes.ok) {
+                const newWs = await createWsRes.json();
+                if (newWs && isValidUUID(newWs.id)) {
+                  targetWsId = newWs.id;
+                }
+              }
+            } catch (createErr) {
+              console.error("Auto-creation of workspace failed:", createErr);
+            }
+          }
         }
+      }
+
+      if (!isValidUUID(targetWsId)) {
+        alert("Please create or select a valid workspace before creating a project.");
+        router.replace('/workspaces');
+        setIsLoading(false);
+        return;
       }
       
       const res = await fetch('http://localhost:8000/api/projects', {

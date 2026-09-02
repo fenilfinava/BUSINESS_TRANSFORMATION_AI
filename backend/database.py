@@ -73,10 +73,18 @@ def create_workspace(name: str, description: Optional[str] = None, owner_id: Opt
         data = {"name": name, "organization_id": real_org_id}
         if owner_id:
             data["owner_id"] = owner_id
+            data["user_id"] = owner_id
             
-        response = client.table("workspaces").insert(data).execute()
-        print("  - Workspace inserted successfully!")
-        return response.data[0] if response.data else {}
+        try:
+            response = client.table("workspaces").insert(data).execute()
+            print("  - Workspace inserted successfully with user_id and owner_id!")
+            return response.data[0] if response.data else {}
+        except Exception as insert_err:
+            if "user_id" in str(insert_err):
+                data.pop("user_id", None)
+                response = client.table("workspaces").insert(data).execute()
+                return response.data[0] if response.data else {}
+            raise insert_err
     except Exception as e:
         print(f"Database insertion failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Supabase DB Error: {str(e)}")

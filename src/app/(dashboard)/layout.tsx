@@ -39,25 +39,48 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     checkAuth();
   }, [router]);
 
-  // 2. Fetch Real Workspace Info
+  const isValidUUID = (val?: string) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+  const [resolvedWsId, setResolvedWsId] = useState<string>(workspaceId || "");
+
+  // 2. Fetch Real Workspace Info & Auto-resolve Real UUID if URL has placeholder
   useEffect(() => {
     async function loadWorkspaceInfo() {
-      if (!workspaceId) return;
-      try {
-        const { data } = await supabase
-          .from("workspaces")
-          .select("name")
-          .eq("id", workspaceId)
-          .single();
-        if (data?.name) {
-          setWorkspaceName(data.name);
+      if (isValidUUID(workspaceId)) {
+        setResolvedWsId(workspaceId);
+        try {
+          const { data } = await supabase
+            .from("workspaces")
+            .select("name")
+            .eq("id", workspaceId)
+            .single();
+          if (data?.name) {
+            setWorkspaceName(data.name);
+          }
+        } catch (err) {
+          console.error("Failed to load workspace info:", err);
         }
-      } catch (err) {
-        console.error("Failed to load workspace info:", err);
+      } else {
+        try {
+          const { data: wsList } = await supabase
+            .from("workspaces")
+            .select("id, name")
+            .order("created_at", { ascending: false })
+            .limit(1);
+          if (wsList && wsList.length > 0 && isValidUUID(wsList[0].id)) {
+            setWorkspaceName(wsList[0].name);
+            setResolvedWsId(wsList[0].id);
+            if (pathname.startsWith("/dashboard/")) {
+              const cleanSuffix = pathname.replace(/^\/dashboard\/[^/]+/, "");
+              router.replace(`/dashboard/${wsList[0].id}${cleanSuffix}`);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to resolve valid workspace:", err);
+        }
       }
     }
     loadWorkspaceInfo();
-  }, [workspaceId]);
+  }, [workspaceId, pathname, router]);
 
   // 3. Clear Session & Flush Cache on Sign Out
   const handleSignOut = async () => {
@@ -83,7 +106,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  const currentWsId = workspaceId || "1";
+  const currentWsId = resolvedWsId || (isValidUUID(workspaceId) ? workspaceId : "");
 
   return (
     <div className="min-h-screen bg-[#f3f4f6] relative flex overflow-hidden">
