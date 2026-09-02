@@ -28,19 +28,10 @@ export default function WorkspacesPage() {
     async function loadWorkspaces() {
       setIsLoading(true);
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        let query = supabase
+        const { data, error } = await supabase
           .from('workspaces')
           .select('*')
           .order('created_at', { ascending: false });
-          
-        if (user) {
-          // If your DB schema uses owner_id instead of user_id, change the string below
-          query = query.eq('owner_id', user.id);
-        }
-
-        const { data, error } = await query;
 
         if (error) {
           console.error("Error fetching workspaces from Supabase:", error);
@@ -58,13 +49,12 @@ export default function WorkspacesPage() {
   }, []);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newWsName, setNewWsName] = useState("");
-  const [newWsDescription, setNewWsDescription] = useState("");
+  const [name, setName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newWsName.trim()) return;
+    if (!name.trim()) return;
     
     setIsCreating(true);
     try {
@@ -76,10 +66,7 @@ export default function WorkspacesPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session?.access_token || ''}`
         },
-        body: JSON.stringify({ 
-          name: newWsName, 
-          description: newWsDescription || "" 
-        })
+        body: JSON.stringify({ name: name })
       });
       
       if (!res.ok) {
@@ -89,8 +76,7 @@ export default function WorkspacesPage() {
       
       const newWs = await res.json();
       setIsModalOpen(false);
-      setNewWsName("");
-      setNewWsDescription("");
+      setName("");
 
       // Dynamic redirection to the real workspace ID
       if (newWs?.id) {
@@ -244,26 +230,17 @@ export default function WorkspacesPage() {
                   <input 
                     autoFocus
                     type="text" 
-                    value={newWsName}
-                    onChange={e => setNewWsName(e.target.value)}
+                    value={name}
+                    onChange={e => setName(e.target.value)}
                     placeholder="e.g. Stark Industries" 
-                    className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-slate-900 mb-4"
-                    required
-                  />
-                  
-                  <label className="block text-sm font-bold text-slate-700 mb-2">Description (Optional)</label>
-                  <input 
-                    type="text" 
-                    value={newWsDescription}
-                    onChange={e => setNewWsDescription(e.target.value)}
-                    placeholder="e.g. For internal operations" 
                     className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-slate-900"
+                    required
                   />
                 </div>
                 <motion.button 
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  disabled={isCreating || !newWsName.trim()}
+                  disabled={isCreating || !name.trim()}
                   type="submit"
                   className="w-full flex items-center justify-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-8 py-3.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/30 disabled:opacity-70 cursor-pointer"
                 >

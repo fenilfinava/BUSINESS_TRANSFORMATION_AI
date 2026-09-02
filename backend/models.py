@@ -17,9 +17,11 @@ class ProjectCreateRequest(BaseModel):
     teamSize: str
     workspace_id: str
 
-class WorkspaceCreateRequest(BaseModel):
+class WorkspaceCreate(BaseModel):
     name: str
     description: Optional[str] = None
+
+WorkspaceCreateRequest = WorkspaceCreate
 
 class DiscoverySubmission(BaseModel):
     project_id: str

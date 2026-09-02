@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List
-from models import WorkspaceResponse, WorkspaceStats, WorkspaceCreateRequest, TeamMember
+from models import WorkspaceResponse, WorkspaceStats, WorkspaceCreate, TeamMember
 from database import get_workspaces, get_workspace, create_workspace, get_workspace_stats, get_team_members, get_current_user
 
 router = APIRouter(prefix="/api/workspaces", tags=["Workspaces"])
@@ -10,12 +10,10 @@ def list_workspaces():
     return get_workspaces()
 
 @router.post("", response_model=WorkspaceResponse)
-def add_workspace(request: WorkspaceCreateRequest, user_id: str = Depends(get_current_user)):
+def add_workspace(request: WorkspaceCreate, user_id: str = Depends(get_current_user)):
     try:
-        print("1. Validating token... Token valid.")
-        print(f"2. Calling create_workspace for {request.name}...")
+        print(f"Adding workspace '{request.name}' for authenticated user '{user_id}'...")
         workspace = create_workspace(request.name, request.description, owner_id=user_id)
-        print("5. Route finished, returning workspace.")
         return workspace
     except Exception as e:
         print(f"Route error: {str(e)}")
