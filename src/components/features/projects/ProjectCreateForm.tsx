@@ -33,11 +33,20 @@ export function ProjectCreateForm({ workspaceId }: { workspaceId: string }) {
     setIsLoading(true);
     console.log("Creating project:", data);
     
-    setTimeout(() => {
+    try {
+      const res = await fetch('http://localhost:8000/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...data, workspace_id: workspaceId })
+      });
+      if (res.ok) {
+        router.push(`/dashboard/${workspaceId}`);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
       setIsLoading(false);
-      alert("Project created successfully! (Mock)");
-      router.push(`/dashboard/${workspaceId}`);
-    }, 1500);
+    }
   };
 
   const inputClass = "block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-slate-900 sm:text-sm";

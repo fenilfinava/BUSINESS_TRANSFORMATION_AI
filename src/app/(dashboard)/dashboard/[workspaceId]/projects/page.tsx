@@ -3,14 +3,22 @@
 import Link from "next/link";
 import { PlusCircle, Search } from "lucide-react";
 import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
 
 export default function ProjectsListPage() {
-  const allProjects = [
-    { id: "1", name: "ERP Cloud Migration", status: "In Progress", industry: "Manufacturing", team: 12 },
-    { id: "2", name: "Customer Portal AI", status: "Planning", industry: "Retail", team: 5 },
-    { id: "3", name: "Supply Chain Optimization", status: "Completed", industry: "Logistics", team: 8 },
-    { id: "4", name: "Data Warehouse Modernization", status: "In Progress", industry: "Finance", team: 15 },
-  ];
+  const params = useParams();
+  const workspaceId = params.workspaceId as string;
+  const [allProjects, setAllProjects] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (workspaceId) {
+      fetch(`http://localhost:8000/api/workspaces/${workspaceId}/projects`)
+        .then(res => res.json())
+        .then(data => setAllProjects(data))
+        .catch(err => console.error(err));
+    }
+  }, [workspaceId]);
 
   return (
     <div className="space-y-6">
@@ -19,7 +27,7 @@ export default function ProjectsListPage() {
           <h1 className="text-2xl font-bold text-slate-900">All Projects</h1>
           <p className="text-slate-500 mt-1">Manage and view all your transformation initiatives.</p>
         </div>
-        <Link href={`/dashboard/1/projects/new`} passHref>
+        <Link href={`/dashboard/${workspaceId}/projects/new`} passHref>
           <motion.div
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -68,7 +76,7 @@ export default function ProjectsListPage() {
                 className="transition-colors group"
               >
                 <td className="px-6 py-4">
-                  <Link href={`/dashboard/1/projects/${proj.id}`} passHref>
+                  <Link href={`/dashboard/${workspaceId}/projects/${proj.id}`} passHref>
                     <motion.div whileHover={{ x: 4 }} className="font-semibold text-blue-600 group-hover:text-blue-700 cursor-pointer inline-block">
                       {proj.name}
                     </motion.div>

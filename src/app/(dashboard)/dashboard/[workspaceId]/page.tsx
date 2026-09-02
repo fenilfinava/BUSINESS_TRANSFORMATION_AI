@@ -3,19 +3,32 @@
 import Link from "next/link";
 import { PlusCircle, Activity, FileText, CheckCircle, Users } from "lucide-react";
 import { motion } from "framer-motion";
-import { use } from "react";
+import { use, useState, useEffect } from "react";
 
 export default function WorkspaceDashboard(
   props: { params: Promise<{ workspaceId: string }> }
 ) {
   const params = use(props.params);
   
-  // Mock data for projects
-  const recentProjects = [
-    { id: "1", name: "ERP Cloud Migration", status: "In Progress", lastUpdated: "2 hours ago" },
-    { id: "2", name: "Customer Portal AI", status: "Planning", lastUpdated: "1 day ago" },
-    { id: "3", name: "Supply Chain Optimization", status: "Completed", lastUpdated: "1 week ago" }
-  ];
+  const [stats, setStats] = useState<any>({
+    active_projects: 0,
+    ai_recommendations: 0,
+    completed_milestones: 0,
+    team_members: 0
+  });
+  const [recentProjects, setRecentProjects] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch(`http://localhost:8000/api/workspaces/${params.workspaceId}/stats`)
+      .then(res => res.json())
+      .then(data => setStats(data))
+      .catch(console.error);
+      
+    fetch(`http://localhost:8000/api/workspaces/${params.workspaceId}/projects`)
+      .then(res => res.json())
+      .then(data => setRecentProjects(data.slice(0, 3)))
+      .catch(console.error);
+  }, [params.workspaceId]);
 
   return (
     <div className="space-y-6">
@@ -39,10 +52,10 @@ export default function WorkspaceDashboard(
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {[
-          { label: "Active Projects", value: "12", icon: Activity, color: "text-blue-500", glow: "shadow-blue-500/20" },
-          { label: "AI Recommendations", value: "84", icon: FileText, color: "text-purple-500", glow: "shadow-purple-500/20" },
-          { label: "Completed Milestones", value: "32", icon: CheckCircle, color: "text-emerald-500", glow: "shadow-emerald-500/20" },
-          { label: "Team Members", value: "8", icon: Users, color: "text-orange-500", glow: "shadow-orange-500/20" }
+          { label: "Active Projects", value: stats.active_projects || "0", icon: Activity, color: "text-blue-500", glow: "shadow-blue-500/20" },
+          { label: "AI Recommendations", value: stats.ai_recommendations || "0", icon: FileText, color: "text-purple-500", glow: "shadow-purple-500/20" },
+          { label: "Completed Milestones", value: stats.completed_milestones || "0", icon: CheckCircle, color: "text-emerald-500", glow: "shadow-emerald-500/20" },
+          { label: "Team Members", value: stats.team_members || "0", icon: Users, color: "text-orange-500", glow: "shadow-orange-500/20" }
         ].map((stat, i) => (
           <motion.div 
             key={i} 

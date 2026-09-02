@@ -4,35 +4,67 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Sparkles, X, Plus } from 'lucide-react';
 import { AnimatedBackground } from '@/components/common/AnimatedBackground';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
 export default function WorkspacesPage() {
-  const [workspaces, setWorkspaces] = useState([
-    { id: '1', name: 'Acme Corp', role: 'Admin', icon: '🏢', color: 'from-blue-500 to-indigo-600' },
-    { id: '2', name: 'Global Tech', role: 'Analyst', icon: '🌐', color: 'from-emerald-400 to-teal-500' },
-  ]);
+  const [workspaces, setWorkspaces] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('http://localhost:8000/api/workspaces')
+      .then(res => res.json())
+      .then(data => {
+        setWorkspaces(data);
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error(err);
+        setIsLoading(false);
+      });
+  }, []);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newWsName, setNewWsName] = useState("");
+  const [newWsDescription, setNewWsDescription] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newWsName.trim()) return;
     
     setIsCreating(true);
-    setTimeout(() => {
-      setWorkspaces([...workspaces, {
-        id: Date.now().toString(),
-        name: newWsName,
-        role: 'Admin',
-        icon: '🚀',
-        color: 'from-purple-500 to-pink-600'
-      }]);
-      setIsCreating(false);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const res = await fetch('http://localhost:8000/api/workspaces', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || ''}`
+        },
+        body: JSON.stringify({ 
+          name: newWsName, 
+          description: newWsDescription || "" 
+        })
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || "Failed to create workspace");
+      }
+      
+      const newWs = await res.json();
+      setWorkspaces([...workspaces, newWs]);
       setIsModalOpen(false);
       setNewWsName("");
-    }, 1000);
+      setNewWsDescription("");
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "An error occurred");
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   return (
@@ -155,8 +187,17 @@ export default function WorkspacesPage() {
                     value={newWsName}
                     onChange={e => setNewWsName(e.target.value)}
                     placeholder="e.g. Stark Industries" 
-                    className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-slate-900"
+                    className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-slate-900 mb-4"
                     required
+                  />
+                  
+                  <label className="block text-sm font-bold text-slate-700 mb-2">Description (Optional)</label>
+                  <input 
+                    type="text" 
+                    value={newWsDescription}
+                    onChange={e => setNewWsDescription(e.target.value)}
+                    placeholder="e.g. For internal operations" 
+                    className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-slate-900"
                   />
                 </div>
                 <motion.button 
