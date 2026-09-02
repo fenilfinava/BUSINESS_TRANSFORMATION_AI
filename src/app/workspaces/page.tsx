@@ -1,27 +1,51 @@
 "use client";
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Sparkles, X, Plus } from 'lucide-react';
 import { AnimatedBackground } from '@/components/common/AnimatedBackground';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 
+const COLOR_GRADIENTS = [
+  "from-blue-500 to-indigo-600",
+  "from-purple-500 to-pink-600",
+  "from-emerald-400 to-teal-500",
+  "from-amber-400 to-orange-500",
+  "from-rose-500 to-red-600",
+];
+
+const ICONS = ["🚀", "🏢", "🌐", "⚡", "💎", "✨"];
+
 export default function WorkspacesPage() {
+  const router = useRouter();
   const [workspaces, setWorkspaces] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Live fetching from Supabase
   useEffect(() => {
-    fetch('http://localhost:8000/api/workspaces')
-      .then(res => res.json())
-      .then(data => {
-        setWorkspaces(data);
+    async function loadWorkspaces() {
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('workspaces')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error("Error fetching workspaces from Supabase:", error);
+        } else if (data) {
+          setWorkspaces(data);
+        }
+      } catch (err) {
+        console.error("Fetch error:", err);
+      } finally {
         setIsLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setIsLoading(false);
-      });
+      }
+    }
+
+    loadWorkspaces();
   }, []);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -55,10 +79,15 @@ export default function WorkspacesPage() {
       }
       
       const newWs = await res.json();
-      setWorkspaces([...workspaces, newWs]);
       setIsModalOpen(false);
       setNewWsName("");
       setNewWsDescription("");
+
+      // Dynamic redirection to the real workspace ID
+      if (newWs?.id) {
+        router.push(`/dashboard/${newWs.id}`);
+        router.refresh();
+      }
     } catch (err: any) {
       console.error(err);
       alert(err.message || "An error occurred");
@@ -98,61 +127,83 @@ export default function WorkspacesPage() {
           </motion.p>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {workspaces.map((ws, i) => (
-            <Link key={ws.id} href={`/dashboard/${ws.id}`} passHref className="block h-full">
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.15, type: "spring", stiffness: 300, damping: 20 }}
-                whileHover={{ y: -10, scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                className="h-full bg-white/70 backdrop-blur-xl p-8 rounded-3xl border border-white shadow-xl shadow-slate-200/50 group relative overflow-hidden flex flex-col justify-between"
-              >
-                <div className={`absolute inset-0 bg-gradient-to-br ${ws.color} opacity-0 group-hover:opacity-[0.05] transition-opacity duration-500`} />
-                
-                {/* Shimmer sweep effect */}
-                <motion.div 
-                  animate={{ x: ['-200%', '300%'] }}
-                  transition={{ duration: 3.5, repeat: Infinity, ease: "linear", repeatDelay: 2 + i }}
-                  className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/50 to-transparent -skew-x-12 z-0"
-                />
-                
-                <div className="relative z-10">
-                  <div className="text-4xl mb-6 bg-white w-16 h-16 flex items-center justify-center rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden group-hover:shadow-md transition-shadow">
-                    <span className="relative z-10">{ws.icon}</span>
-                    <div className={`absolute inset-0 bg-gradient-to-br ${ws.color} opacity-0 group-hover:opacity-10 transition-opacity`} />
-                  </div>
-                  <h2 className="text-2xl font-bold text-slate-900 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-indigo-600 transition-all">{ws.name}</h2>
-                  <div className="mt-4 inline-flex items-center space-x-2 bg-slate-50/80 px-3 py-1.5 rounded-full border border-slate-200/50 backdrop-blur-sm">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-[pulse_2s_ease-in-out_infinite]" />
-                    <span className="text-sm text-slate-600 font-bold tracking-wide">{ws.role}</span>
-                  </div>
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[1, 2, 3].map((n) => (
+              <div key={n} className="h-64 bg-white/40 backdrop-blur-xl p-8 rounded-3xl border border-white/60 animate-pulse flex flex-col justify-between">
+                <div>
+                  <div className="w-16 h-16 bg-slate-200/80 rounded-2xl mb-6" />
+                  <div className="h-6 bg-slate-200/80 rounded-lg w-3/4 mb-3" />
+                  <div className="h-4 bg-slate-200/60 rounded-md w-1/3" />
                 </div>
+                <div className="h-4 bg-slate-200/60 rounded-md w-1/2" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {workspaces.map((ws, i) => {
+              const color = ws.color || COLOR_GRADIENTS[i % COLOR_GRADIENTS.length];
+              const icon = ws.icon || ICONS[i % ICONS.length];
+              const role = ws.role || "Admin";
 
-                <div className="mt-8 flex items-center text-blue-600 font-bold group-hover:translate-x-2 transition-transform relative z-10">
-                  Enter Workspace <ArrowRight size={18} className="ml-2 group-hover:animate-pulse" />
-                </div>
-              </motion.div>
-            </Link>
-          ))}
-          
-          <motion.button 
-            onClick={() => setIsModalOpen(true)}
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: workspaces.length * 0.15, type: "spring", stiffness: 300, damping: 20 }}
-            whileHover={{ y: -10, scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            className="w-full text-left bg-white/40 backdrop-blur-xl p-8 rounded-3xl border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 transition-all text-slate-600 group flex flex-col items-center justify-center min-h-[250px] cursor-pointer"
-          >
-            <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center mb-4 border border-slate-200 group-hover:border-blue-200 transition-colors shadow-sm group-hover:shadow-blue-500/25">
-              <Plus className="text-slate-400 group-hover:text-blue-500 transition-colors w-8 h-8" />
-            </div>
-            <span className="text-lg font-bold text-slate-700 tracking-wide">New Workspace</span>
-            <span className="text-sm mt-2 text-slate-500 group-hover:text-blue-600 transition-colors text-center">Set up a new organization</span>
-          </motion.button>
-        </div>
+              return (
+                <Link key={ws.id} href={`/dashboard/${ws.id}`} passHref className="block h-full">
+                  <motion.div
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.15, type: "spring", stiffness: 300, damping: 20 }}
+                    whileHover={{ y: -10, scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="h-full bg-white/70 backdrop-blur-xl p-8 rounded-3xl border border-white shadow-xl shadow-slate-200/50 group relative overflow-hidden flex flex-col justify-between"
+                  >
+                    <div className={`absolute inset-0 bg-gradient-to-br ${color} opacity-0 group-hover:opacity-[0.05] transition-opacity duration-500`} />
+                    
+                    {/* Shimmer sweep effect */}
+                    <motion.div 
+                      animate={{ x: ['-200%', '300%'] }}
+                      transition={{ duration: 3.5, repeat: Infinity, ease: "linear", repeatDelay: 2 + i }}
+                      className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/50 to-transparent -skew-x-12 z-0"
+                    />
+                    
+                    <div className="relative z-10">
+                      <div className="text-4xl mb-6 bg-white w-16 h-16 flex items-center justify-center rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden group-hover:shadow-md transition-shadow">
+                        <span className="relative z-10">{icon}</span>
+                        <div className={`absolute inset-0 bg-gradient-to-br ${color} opacity-0 group-hover:opacity-10 transition-opacity`} />
+                      </div>
+                      <h2 className="text-2xl font-bold text-slate-900 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-indigo-600 transition-all">{ws.name}</h2>
+                      <div className="mt-4 inline-flex items-center space-x-2 bg-slate-50/80 px-3 py-1.5 rounded-full border border-slate-200/50 backdrop-blur-sm">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-[pulse_2s_ease-in-out_infinite]" />
+                        <span className="text-sm text-slate-600 font-bold tracking-wide">{role}</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-8 flex items-center text-blue-600 font-bold group-hover:translate-x-2 transition-transform relative z-10">
+                      Enter Workspace <ArrowRight size={18} className="ml-2 group-hover:animate-pulse" />
+                    </div>
+                  </motion.div>
+                </Link>
+              );
+            })}
+            
+            <motion.button 
+              onClick={() => setIsModalOpen(true)}
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: workspaces.length * 0.15, type: "spring", stiffness: 300, damping: 20 }}
+              whileHover={{ y: -10, scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              className="w-full text-left bg-white/40 backdrop-blur-xl p-8 rounded-3xl border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 transition-all text-slate-600 group flex flex-col items-center justify-center min-h-[250px] cursor-pointer"
+            >
+              <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center mb-4 border border-slate-200 group-hover:border-blue-200 transition-colors shadow-sm group-hover:shadow-blue-500/25">
+                <Plus className="text-slate-400 group-hover:text-blue-500 transition-colors w-8 h-8" />
+              </div>
+              <span className="text-lg font-bold text-slate-700 tracking-wide">New Workspace</span>
+              <span className="text-sm mt-2 text-slate-500 group-hover:text-blue-600 transition-colors text-center">Set up a new organization</span>
+            </motion.button>
+          </div>
+        )}
+
       </div>
 
       {/* New Workspace Modal */}

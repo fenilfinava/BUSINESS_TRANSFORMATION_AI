@@ -1,9 +1,36 @@
-import { ReactNode } from "react";
+"use client";
+
+import { ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { LayoutDashboard, FolderKanban, Settings, Users, LogOut, Zap } from "lucide-react";
 import { PageTransition } from "@/components/common/PageTransition";
+import { supabase } from "@/lib/supabase";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
+  const params = useParams();
+  const workspaceId = (params?.workspaceId as string) || "1";
+  const [workspaceName, setWorkspaceName] = useState<string>("Workspace");
+
+  useEffect(() => {
+    async function loadWorkspaceInfo() {
+      if (!workspaceId || workspaceId === "1") return;
+      try {
+        const { data } = await supabase
+          .from("workspaces")
+          .select("name")
+          .eq("id", workspaceId)
+          .single();
+        if (data?.name) {
+          setWorkspaceName(data.name);
+        }
+      } catch (err) {
+        console.error("Failed to load workspace info:", err);
+      }
+    }
+    loadWorkspaceInfo();
+  }, [workspaceId]);
+
   return (
     <div className="min-h-screen bg-[#f3f4f6] relative flex overflow-hidden">
       {/* Background decorations */}
@@ -27,26 +54,26 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </div>
         
         <nav className="flex-1 px-4 py-6 space-y-3 relative z-10">
-          <Link href="/dashboard/1" className="group flex items-center space-x-4 px-4 py-3 bg-white/10 rounded-2xl text-white transition-all shadow-[0_0_15px_rgba(59,130,246,0.15)] border border-white/10">
+          <Link href={`/dashboard/${workspaceId}`} className="group flex items-center space-x-4 px-4 py-3 bg-white/10 rounded-2xl text-white transition-all shadow-[0_0_15px_rgba(59,130,246,0.15)] border border-white/10">
             <LayoutDashboard size={20} className="text-blue-400" />
             <span className="font-medium">Dashboard</span>
           </Link>
-          <Link href="/dashboard/1/modules" className="group flex items-center space-x-4 px-4 py-3 text-slate-400 hover:bg-white/5 hover:text-white rounded-2xl transition-all border border-transparent hover:border-white/5">
+          <Link href={`/dashboard/${workspaceId}/modules`} className="group flex items-center space-x-4 px-4 py-3 text-slate-400 hover:bg-white/5 hover:text-white rounded-2xl transition-all border border-transparent hover:border-white/5">
             <Zap size={20} className="group-hover:text-yellow-400 transition-colors" />
             <span className="font-medium">AI Modules</span>
           </Link>
-          <Link href="/dashboard/1/projects" className="group flex items-center space-x-4 px-4 py-3 text-slate-400 hover:bg-white/5 hover:text-white rounded-2xl transition-all border border-transparent hover:border-white/5">
+          <Link href={`/dashboard/${workspaceId}/projects`} className="group flex items-center space-x-4 px-4 py-3 text-slate-400 hover:bg-white/5 hover:text-white rounded-2xl transition-all border border-transparent hover:border-white/5">
             <FolderKanban size={20} className="group-hover:text-purple-400 transition-colors" />
             <span className="font-medium">Projects</span>
           </Link>
-          <Link href="/dashboard/1/team" className="group flex items-center space-x-4 px-4 py-3 text-slate-400 hover:bg-white/5 hover:text-white rounded-2xl transition-all border border-transparent hover:border-white/5">
+          <Link href={`/dashboard/${workspaceId}/team`} className="group flex items-center space-x-4 px-4 py-3 text-slate-400 hover:bg-white/5 hover:text-white rounded-2xl transition-all border border-transparent hover:border-white/5">
             <Users size={20} className="group-hover:text-emerald-400 transition-colors" />
             <span className="font-medium">Team</span>
           </Link>
         </nav>
         
         <div className="p-4 border-t border-white/5 relative z-10 space-y-2">
-          <Link href="/dashboard/1/settings" className="group flex items-center space-x-4 px-4 py-3 text-slate-400 hover:bg-white/5 hover:text-white rounded-2xl transition-all">
+          <Link href={`/dashboard/${workspaceId}/settings`} className="group flex items-center space-x-4 px-4 py-3 text-slate-400 hover:bg-white/5 hover:text-white rounded-2xl transition-all">
             <Settings size={20} className="group-hover:text-slate-300 transition-colors" />
             <span className="font-medium text-sm">Settings</span>
           </Link>
@@ -62,11 +89,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         {/* Header - Transparent & Floating */}
         <header className="h-24 flex items-center justify-between px-10 pt-4">
           <div className="flex items-center space-x-4">
-            <h2 className="text-2xl font-black text-slate-800 tracking-tight">Acme Corp Workspace</h2>
+            <h2 className="text-2xl font-black text-slate-800 tracking-tight">{workspaceName}</h2>
             <span className="bg-white/60 backdrop-blur-md border border-slate-200 px-3 py-1 rounded-full text-xs font-bold text-slate-500 shadow-sm">Enterprise</span>
           </div>
           <div className="flex items-center space-x-6">
-            <Link href="/dashboard/1/settings" className="bg-white/80 backdrop-blur-md shadow-sm border border-slate-200 w-10 h-10 rounded-full flex items-center justify-center text-slate-600 hover:text-blue-600 hover:border-blue-300 transition-all">
+            <Link href={`/dashboard/${workspaceId}/settings`} className="bg-white/80 backdrop-blur-md shadow-sm border border-slate-200 w-10 h-10 rounded-full flex items-center justify-center text-slate-600 hover:text-blue-600 hover:border-blue-300 transition-all">
               <Settings size={18} />
             </Link>
             
@@ -80,7 +107,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                   <p className="text-xs text-slate-500 mt-0.5">user@example.com</p>
                 </div>
                 <div className="p-2">
-                  <Link href="/dashboard/1/settings" className="block px-3 py-2 text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">Account Settings</Link>
+                  <Link href={`/dashboard/${workspaceId}/settings`} className="block px-3 py-2 text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">Account Settings</Link>
                   <Link href="/workspaces" className="block px-3 py-2 text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">Switch Workspace</Link>
                 </div>
                 <div className="p-2 border-t border-slate-100">
@@ -101,3 +128,4 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     </div>
   );
 }
+

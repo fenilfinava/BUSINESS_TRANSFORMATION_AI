@@ -51,9 +51,11 @@ class SSEEvent(BaseModel):
 class WorkspaceResponse(BaseModel):
     id: str
     name: str
-    role: str
-    icon: str
-    color: str
+    organization_id: Optional[str] = None
+    role: Optional[str] = "Admin"
+    icon: Optional[str] = "🚀"
+    color: Optional[str] = "from-blue-500 to-indigo-600"
+    created_at: Optional[Any] = None
 
 class ProjectResponse(BaseModel):
     id: str

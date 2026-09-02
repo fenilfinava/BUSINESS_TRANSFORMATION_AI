@@ -6,8 +6,8 @@ from database import get_workspaces, get_workspace, create_workspace, get_worksp
 router = APIRouter(prefix="/api/workspaces", tags=["Workspaces"])
 
 @router.get("", response_model=List[WorkspaceResponse])
-async def list_workspaces():
-    return await get_workspaces()
+def list_workspaces():
+    return get_workspaces()
 
 @router.post("", response_model=WorkspaceResponse)
 def add_workspace(request: WorkspaceCreateRequest, user_id: str = Depends(get_current_user)):

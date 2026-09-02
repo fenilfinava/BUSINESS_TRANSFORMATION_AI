@@ -47,16 +47,14 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         print(f"Token validation failed: {str(e)}")
         raise HTTPException(status_code=401, detail=f"Supabase Auth Error: {str(e)}")
 
-async def get_workspaces(organization_id: str = "org_1") -> List[Dict[str, Any]]:
-    if settings.mock_mode:
-        return [
-            {"id": "1", "name": "Acme Corp", "role": "Admin", "icon": "🏢", "color": "from-blue-500 to-indigo-600"},
-            {"id": "2", "name": "Global Tech", "role": "Analyst", "icon": "🌐", "color": "from-emerald-400 to-teal-500"}
-        ]
-    # Real Supabase call
+def get_workspaces() -> List[Dict[str, Any]]:
     client = get_supabase_client()
-    response = client.table("workspaces").select("*").eq("organization_id", organization_id).execute()
-    return response.data
+    try:
+        response = client.table("workspaces").select("*").order("created_at", desc=True).execute()
+        return response.data or []
+    except Exception as e:
+        print(f"Error fetching workspaces from database: {e}")
+        return []
 
 async def get_workspace(workspace_id: str) -> Dict[str, Any]:
     if settings.mock_mode:
