@@ -120,22 +120,44 @@ export default function ModulesPage() {
     if (!slug || !projectId || !isValidUUID(projectId)) return;
     setLoadingVersions(prev => ({ ...prev, [slug]: true }));
     try {
+      let rawData: any[] = [];
       const { data, error } = await supabase
         .from('blueprints')
-        .select('id, module_type, module_name, generated_content, data, created_at')
+        .select('*')
         .eq('project_id', projectId)
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error("Error loading blueprint versions:", error);
-        return;
+        console.error("Error loading blueprint versions from Supabase:", error);
+      } else if (data && data.length > 0) {
+        rawData = data;
+      }
+
+      if (rawData.length === 0) {
+        // Fallback to FastAPI endpoint
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          try {
+            const res = await fetch(`http://localhost:8000/api/ai/blueprints/${projectId}?module_type=${slug}`, {
+              headers: { Authorization: `Bearer ${session.access_token}` }
+            });
+            if (res.ok) {
+              const backendVersions = await res.json();
+              if (backendVersions && backendVersions.length > 0) {
+                rawData = backendVersions;
+              }
+            }
+          } catch (e) {
+            console.warn("Backend version fetch fallback failed:", e);
+          }
+        }
       }
 
       const currentModuleMeta = aiModules.find(m => m.slug === slug);
       const targetSlug = slug.toLowerCase();
       const targetName = (currentModuleMeta?.name || "").toLowerCase();
 
-      const matching = (data || []).filter((row: any) => {
+      const matching = rawData.filter((row: any) => {
         const type = (row.module_type || row.module_name || "").toLowerCase();
         return type === targetSlug || type === targetName;
       });

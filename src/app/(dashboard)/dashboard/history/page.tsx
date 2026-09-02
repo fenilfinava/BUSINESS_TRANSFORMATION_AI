@@ -158,30 +158,70 @@ export default function HistoryDashboardPage() {
     async function fetchHistory() {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from("blueprints")
-          .select(`
-            id,
-            module_type,
-            module_name,
-            created_at,
-            generated_content,
-            data,
-            projects ( id, name )
-          `)
-          .order("created_at", { ascending: false });
+        // 1. Check authenticated user session
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        console.log("DEBUG: Current Authenticated User ID:", user?.id);
 
-        if (error) {
-          console.error("Supabase fetch blueprints error:", error);
+        if (!user) {
+          console.error("DEBUG ERROR: No active Supabase session found when querying history.", userError);
           setBlueprints([]);
+          setLoading(false);
           return;
         }
 
-        const mapped: BlueprintItem[] = (data || []).map((row: any) => {
+        // 2. Fetch blueprints without complex foreign joins first to isolate join issues
+        const { data, error } = await supabase
+          .from('blueprints')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        console.log("DEBUG: Raw Blueprints fetched from Supabase:", data);
+        if (error) {
+          console.error("DEBUG ERROR: Supabase query failed:", error);
+        }
+
+        // Project map cache for displaying real project names
+        let projectMap: Record<string, string> = {};
+        try {
+          const { data: projectsData } = await supabase.from('projects').select('id, name');
+          if (projectsData) {
+            projectsData.forEach((p: any) => {
+              projectMap[p.id] = p.name;
+            });
+          }
+        } catch (pErr) {
+          console.warn("Could not load project names for history mapping:", pErr);
+        }
+
+        let rawList = data || [];
+
+        // Fallback: If Supabase query returns empty or failed (e.g. restrictive RLS before SQL migration), fetch via authenticated FastAPI backend
+        if (rawList.length === 0) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            try {
+              console.log("DEBUG: Attempting backend fallback fetch at http://localhost:8000/api/ai/blueprints");
+              const res = await fetch("http://localhost:8000/api/ai/blueprints", {
+                headers: { Authorization: `Bearer ${session.access_token}` }
+              });
+              if (res.ok) {
+                const backendData = await res.json();
+                console.log("DEBUG: Blueprints fetched from backend fallback:", backendData);
+                if (backendData && backendData.length > 0) {
+                  rawList = backendData;
+                }
+              }
+            } catch (backendErr) {
+              console.warn("DEBUG: Backend fallback fetch failed:", backendErr);
+            }
+          }
+        }
+
+        const mapped: BlueprintItem[] = rawList.map((row: any) => {
           const rawContent = row.generated_content || row.data || {};
           const moduleKey = row.module_type || row.module_name || "unknown";
           const proj = Array.isArray(row.projects) ? row.projects[0] : row.projects;
-          const projectName = proj?.name || "General Project";
+          const projectName = proj?.name || (row.project_id && projectMap[row.project_id]) || "General Project";
           const projectId = proj?.id || row.project_id;
 
           let title = rawContent.title || "";
@@ -210,9 +250,11 @@ export default function HistoryDashboardPage() {
           };
         });
 
+        // 3. Set state
         setBlueprints(mapped);
       } catch (err) {
         console.error("Error loading blueprint history:", err);
+        setBlueprints([]);
       } finally {
         setLoading(false);
       }

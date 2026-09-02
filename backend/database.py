@@ -134,29 +134,17 @@ async def save_blueprint(project_id: str, module_type: str, data: Dict[str, Any]
 
     client = get_supabase_client()
     try:
-        # Phase 1 & 2: Append-only insert with modern and legacy field coverage
+        # Phase 1 & 2: Append-only insert with modern field coverage
         payload = {
             "project_id": project_id,
             "module_type": module_type,
-            "module_name": module_type,
-            "generated_content": data,
-            "data": data,
+            "generated_content": data
         }
         res = client.table("blueprints").insert(payload).execute()
         return res.data[0] if res.data else {}
     except Exception as e:
-        # Fallback if module_type / generated_content column migration is pending
-        try:
-            legacy_payload = {
-                "project_id": project_id,
-                "module_name": module_type,
-                "data": data
-            }
-            res = client.table("blueprints").insert(legacy_payload).execute()
-            return res.data[0] if res.data else {}
-        except Exception as e2:
-            print(f"Error saving blueprint: {e2}")
-            raise e2
+        print(f"Error saving blueprint: {e}")
+        raise e
 
 async def get_blueprints(project_id: str, module_type: Optional[str] = None) -> List[Dict[str, Any]]:
     import uuid
@@ -169,11 +157,20 @@ async def get_blueprints(project_id: str, module_type: Optional[str] = None) -> 
     try:
         query = client.table("blueprints").select("*").eq("project_id", project_id)
         if module_type:
-            query = query.or_(f"module_type.eq.{module_type},module_name.eq.{module_type}")
+            query = query.eq("module_type", module_type)
         response = query.order("created_at", desc=True).execute()
         return response.data or []
     except Exception as e:
         print(f"Error fetching blueprints: {e}")
+        return []
+
+async def get_all_blueprints(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    client = get_supabase_client()
+    try:
+        response = client.table("blueprints").select("*, projects(id, name)").order("created_at", desc=True).execute()
+        return response.data or []
+    except Exception as e:
+        print(f"Error fetching all blueprints: {e}")
         return []
 
 async def get_workspace_stats(workspace_id: str) -> Dict[str, Any]:

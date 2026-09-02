@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from database import get_current_user, get_supabase_client, save_blueprint, get_project, get_blueprints
+from database import get_current_user, get_supabase_client, save_blueprint, get_project, get_blueprints, get_all_blueprints
 import os
 import json
 
@@ -247,8 +247,16 @@ def normalize_blueprint(b: Dict[str, Any]) -> Dict[str, Any]:
         "module_name": b.get("module_name") or b.get("module_type") or "",
         "generated_content": content,
         "data": content,
-        "created_at": b.get("created_at")
+        "created_at": b.get("created_at"),
+        "projects": b.get("projects")
     }
+
+
+@router.get("/blueprints")
+async def get_all_blueprints_endpoint(user_id: str = Depends(get_current_user)):
+    """Fetch all saved blueprints across projects."""
+    raw_blueprints = await get_all_blueprints(user_id)
+    return [normalize_blueprint(b) for b in raw_blueprints]
 
 
 @router.get("/blueprints/{project_id}")
