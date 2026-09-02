@@ -112,12 +112,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             { name: "Dashboard", href: `/dashboard/${currentWsId}`, exact: true, icon: LayoutDashboard, iconColor: "text-blue-400" },
             { name: "AI Modules", href: `/dashboard/${currentWsId}/modules`, exact: false, icon: Zap, iconColor: "text-yellow-400" },
             { name: "Projects", href: `/dashboard/${currentWsId}/projects`, exact: false, icon: FolderKanban, iconColor: "text-purple-400" },
-            { name: "History", href: `/dashboard/${currentWsId}/history`, exact: false, icon: History, iconColor: "text-indigo-400" },
+            { name: "History", href: `/dashboard/history`, exact: false, icon: History, iconColor: "text-indigo-400" },
             { name: "Team", href: `/dashboard/${currentWsId}/team`, exact: false, icon: Users, iconColor: "text-emerald-400" },
           ].map((link) => {
             const isActive = link.exact 
               ? pathname === link.href 
-              : pathname.startsWith(link.href);
+              : pathname.startsWith(link.href) || (link.name === "History" && (pathname === "/dashboard/history" || pathname.endsWith("/history")));
               
             const Icon = link.icon;
             

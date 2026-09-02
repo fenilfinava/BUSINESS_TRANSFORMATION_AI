@@ -46,12 +46,15 @@ class AIGenerateRequest(BaseModel):
     business_context: str
 
 class AIGenerateResponse(BaseModel):
+    id: Optional[str] = None
+    created_at: Optional[str] = None
     module_type: str
     content: str
     format: str = "markdown"
     title: Optional[str] = None
     summary: Optional[str] = None
     key_recommendations: Optional[list[str]] = None
+    generated_content: Optional[Dict[str, Any]] = None
 
 # --- Specialized Module Instructions ---
 MODULE_INSTRUCTIONS = {
@@ -192,7 +195,7 @@ Format Requirement: Output valid JSON containing:
     if not isinstance(key_recommendations, list):
         key_recommendations = [str(key_recommendations)]
 
-    # 5. Save to blueprints table in Supabase
+    # 5. Insert into Supabase blueprints table
     blueprint_payload = {
         "format": "markdown",
         "title": title,
@@ -200,20 +203,28 @@ Format Requirement: Output valid JSON containing:
         "content": content_markdown,
         "key_recommendations": key_recommendations
     }
-    try:
-        await save_blueprint(request.project_id, resolved_module, blueprint_payload)
-        print(f"💾 Blueprint saved for module '{resolved_module}'")
-    except Exception as e:
-        print(f"⚠️ Failed to save blueprint (non-fatal): {str(e)}")
 
-    # 6. Return parsed response directly to the client
+    try:
+        saved_record = await save_blueprint(request.project_id, resolved_module, blueprint_payload)
+        print(f"💾 Blueprint saved for module '{resolved_module}' with ID {saved_record.get('id')}")
+    except Exception as e:
+        print(f"❌ Database insert error into blueprints: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to persist blueprint to database: {str(e)}"
+        )
+
+    # 6. Return the saved blueprint record (including id and created_at) back to frontend
     return AIGenerateResponse(
+        id=saved_record.get("id"),
+        created_at=saved_record.get("created_at"),
         module_type=resolved_module,
         title=title,
         summary=summary,
         content=content_markdown,
         key_recommendations=key_recommendations,
-        format="markdown"
+        format="markdown",
+        generated_content=blueprint_payload
     )
 
 
