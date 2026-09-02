@@ -29,7 +29,9 @@ try:
     import google.generativeai as genai
     if GEMINI_API_KEY:
         genai.configure(api_key=GEMINI_API_KEY)
-        gemini_model = genai.GenerativeModel("gemini-1.5-pro")
+        model_name = 'gemini-3.6-flash'
+        print(f"DEBUG: Selected Gemini Model: {model_name}")
+        gemini_model = genai.GenerativeModel(model_name)
         print("✅ Gemini AI initialized successfully")
     else:
         gemini_error = "GEMINI_API_KEY is missing from environment variables."
@@ -152,13 +154,23 @@ Business Context: {project_context if project_context else project_desc}
 {business_context}
 --- END CONTEXT ---
 
-Please provide a comprehensive, professional-grade output. Be specific and actionable.
+Please provide a comprehensive, professional-grade output formatted as a valid JSON object with keys:
+- "module_type": "{request.module_type}"
+- "title": A descriptive title for this blueprint
+- "summary": A high-level executive summary
+- "content": The primary generated output (markdown, mermaid diagram, or data)
+- "key_recommendations": A list of top recommendations
 """
 
     # 4. Call Gemini
     try:
         print(f"🤖 Calling Gemini for module '{request.module_type}' on project '{project_name}'...")
-        response = gemini_model.generate_content(full_prompt)
+        response = gemini_model.generate_content(
+            full_prompt,
+            generation_config=genai.GenerationConfig(
+                response_mime_type="application/json",
+            )
+        )
         generated_text = response.text
         print(f"✅ Gemini response received ({len(generated_text)} chars)")
     except Exception as e:
