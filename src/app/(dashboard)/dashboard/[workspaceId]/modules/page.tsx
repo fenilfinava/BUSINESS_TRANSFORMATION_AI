@@ -6,7 +6,7 @@ import {
   PenTool, Database, Clock, BarChart3, ArrowRight, X, Loader2, 
   ChevronDown, Sparkles
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -38,6 +38,9 @@ export default function ModulesPage() {
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [activeModule, setActiveModule] = useState<typeof aiModules[0] | null>(null);
 
+  // AbortController ref for canceling requests
+  const abortControllersRef = useRef<Record<string, AbortController>>({});
+
   // Per-module loading, results, and errors for true concurrency
   const [loadingModules, setLoadingModules] = useState<Record<string, boolean>>({});
   const [moduleResults, setModuleResults] = useState<Record<string, { content: string; format: string }>>({});
@@ -68,14 +71,22 @@ export default function ModulesPage() {
     setActiveModule(mod);
   };
 
-  // Non-blocking, module-specific generation call
+  // Non-blocking, cancellable module-specific generation call
   const handleGenerate = async (targetModuleSlug?: string) => {
     const slug = targetModuleSlug || activeModule?.slug;
     if (!slug || !selectedProject) return;
 
+    // Pull current project description/context
+    const currentProject = projects.find(p => p.id === selectedProject);
+    const projectDetails = currentProject?.description || currentProject?.name || "Digital transformation and modernization project";
+
     // Set only this module as loading
     setLoadingModules(prev => ({ ...prev, [slug]: true }));
     setModuleErrors(prev => ({ ...prev, [slug]: "" }));
+
+    // Create and track AbortController for this module
+    const controller = new AbortController();
+    abortControllersRef.current[slug] = controller;
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -85,7 +96,7 @@ export default function ModulesPage() {
         return;
       }
 
-      // Non-blocking fetch for this specific module
+      // Non-blocking fetch with signal and business_context payload
       const res = await fetch("http://localhost:8000/api/ai/generate", {
         method: "POST",
         headers: {
@@ -93,9 +104,11 @@ export default function ModulesPage() {
           "Authorization": `Bearer ${session.access_token}`
         },
         body: JSON.stringify({
+          module_type: slug,
           project_id: selectedProject,
-          module_type: slug
-        })
+          business_context: projectDetails
+        }),
+        signal: controller.signal
       });
 
       if (!res.ok) {
@@ -110,10 +123,17 @@ export default function ModulesPage() {
         [slug]: { content: data.content, format: data.format }
       }));
     } catch (err: any) {
+      if (err.name === "AbortError") {
+        console.log(`Generation for ${slug} was cancelled.`);
+        setModuleErrors(prev => ({ ...prev, [slug]: "Generation cancelled." }));
+        return;
+      }
       setModuleErrors(prev => ({ ...prev, [slug]: err.message || "Network error." }));
       console.error(err);
     } finally {
+      // Loading state strictly tied to fetch lifecycle
       setLoadingModules(prev => ({ ...prev, [slug]: false }));
+      delete abortControllersRef.current[slug];
     }
   };
 
@@ -228,20 +248,40 @@ export default function ModulesPage() {
                   )}
                 </div>
 
-                {/* Generate Button */}
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => handleGenerate(activeModule.slug)}
-                  disabled={loadingModules[activeModule.slug] || !selectedProject || projects.length === 0}
-                  className="w-full flex items-center justify-center py-3.5 px-4 border border-transparent shadow-lg shadow-blue-500/30 text-sm font-bold rounded-xl text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 transition-all cursor-pointer"
-                >
-                  {loadingModules[activeModule.slug] ? (
-                    <><Loader2 size={18} className="animate-spin mr-2" /> Generating with Gemini AI (Async)...</>
-                  ) : (
-                    <><Sparkles size={18} className="mr-2" /> Generate Blueprint</>
+                {/* Generate Button & Cancel Action */}
+                <div className="space-y-2.5">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => handleGenerate(activeModule.slug)}
+                    disabled={loadingModules[activeModule.slug] || !selectedProject || projects.length === 0}
+                    className="w-full flex items-center justify-center py-3.5 px-4 border border-transparent shadow-lg shadow-blue-500/30 text-sm font-bold rounded-xl text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 transition-all cursor-pointer"
+                  >
+                    {loadingModules[activeModule.slug] ? (
+                      <><Loader2 size={18} className="animate-spin mr-2" /> Generating with Gemini AI...</>
+                    ) : (
+                      <><Sparkles size={18} className="mr-2" /> Generate Blueprint</>
+                    )}
+                  </motion.button>
+
+                  {loadingModules[activeModule.slug] && (
+                    <motion.button
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.98 }}
+                      type="button"
+                      onClick={() => {
+                        if (abortControllersRef.current[activeModule.slug]) {
+                          abortControllersRef.current[activeModule.slug].abort();
+                        }
+                      }}
+                      className="w-full flex items-center justify-center py-2.5 px-4 border border-rose-200 text-sm font-bold rounded-xl text-rose-600 bg-rose-50 hover:bg-rose-100 transition-all cursor-pointer"
+                    >
+                      <X size={16} className="mr-1.5" /> Cancel Generation
+                    </motion.button>
                   )}
-                </motion.button>
+                </div>
 
                 {/* Error Display */}
                 {moduleErrors[activeModule.slug] && (

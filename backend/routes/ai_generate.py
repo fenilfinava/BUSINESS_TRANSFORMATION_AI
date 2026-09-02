@@ -44,6 +44,7 @@ except ImportError:
 class AIGenerateRequest(BaseModel):
     project_id: str
     module_type: str  # e.g., 'architecture', 'database_schema', 'ux_wireframe'
+    business_context: str
 
 class AIGenerateResponse(BaseModel):
     module_type: str
@@ -145,16 +146,16 @@ Description: {project_desc}
 Business Context: {project_context if project_context else project_desc}
 """
 
-    # 3. Construct the prompt
-    full_prompt = f"""{module_config['system']}
+    # 3. Construct the prompt utilizing request.business_context
+    full_prompt = f"""You are an expert system architect. Generate a {request.module_type} blueprint for the following business: {request.business_context}. Output strictly in JSON format.
 
+Role Instructions:
+{module_config['system']}
 {module_config['task']}
 
---- BUSINESS CONTEXT ---
-{business_context}
---- END CONTEXT ---
+Target output format details: {module_config['format']}
 
-Please provide a comprehensive, professional-grade output formatted as a valid JSON object with keys:
+Output JSON structure must have the following keys:
 - "module_type": "{request.module_type}"
 - "title": A descriptive title for this blueprint
 - "summary": A high-level executive summary
@@ -164,7 +165,7 @@ Please provide a comprehensive, professional-grade output formatted as a valid J
 
     # 4. Call Gemini Asynchronously
     try:
-        print(f"🤖 Calling Gemini for module '{request.module_type}' on project '{project_name}'...")
+        print(f"🤖 Calling Gemini for module '{request.module_type}' on project '{request.project_id}'...")
         response = await gemini_model.generate_content_async(
             full_prompt,
             generation_config=genai.GenerationConfig(
