@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, usePathname } from "next/navigation";
 import { LayoutDashboard, FolderKanban, Settings, Users, LogOut, Zap } from "lucide-react";
 import { PageTransition } from "@/components/common/PageTransition";
 import { supabase } from "@/lib/supabase";
@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase";
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const params = useParams();
+  const pathname = usePathname();
   const workspaceId = (params?.workspaceId as string) || "";
   const [workspaceName, setWorkspaceName] = useState<string>("Workspace");
   const [userEmail, setUserEmail] = useState<string>("user@example.com");
@@ -22,7 +23,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         const { data: { session }, error } = await supabase.auth.getSession();
         if (!session || error) {
           console.log("No active session found in dashboard. Redirecting to login...");
-          router.push('/login');
+          router.replace('/login');
           return;
         }
         if (session.user?.email) {
@@ -30,7 +31,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         }
       } catch (err) {
         console.error("Auth check error:", err);
-        router.push('/login');
+        router.replace('/login');
       } finally {
         setIsAuthChecking(false);
       }
@@ -65,7 +66,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error("Sign out error:", err);
     }
-    router.push('/login');
+    router.replace('/login');
+    router.refresh();
+  };
+
+  const handleSwitchWorkspace = () => {
+    router.push('/workspaces');
     router.refresh();
   };
 
@@ -102,33 +108,51 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </div>
         
         <nav className="flex-1 px-4 py-6 space-y-3 relative z-10">
-          <Link href={`/dashboard/${currentWsId}`} className="group flex items-center space-x-4 px-4 py-3 bg-white/10 rounded-2xl text-white transition-all shadow-[0_0_15px_rgba(59,130,246,0.15)] border border-white/10">
-            <LayoutDashboard size={20} className="text-blue-400" />
-            <span className="font-medium">Dashboard</span>
-          </Link>
-          <Link href={`/dashboard/${currentWsId}/modules`} className="group flex items-center space-x-4 px-4 py-3 text-slate-400 hover:bg-white/5 hover:text-white rounded-2xl transition-all border border-transparent hover:border-white/5">
-            <Zap size={20} className="group-hover:text-yellow-400 transition-colors" />
-            <span className="font-medium">AI Modules</span>
-          </Link>
-          <Link href={`/dashboard/${currentWsId}/projects`} className="group flex items-center space-x-4 px-4 py-3 text-slate-400 hover:bg-white/5 hover:text-white rounded-2xl transition-all border border-transparent hover:border-white/5">
-            <FolderKanban size={20} className="group-hover:text-purple-400 transition-colors" />
-            <span className="font-medium">Projects</span>
-          </Link>
-          <Link href={`/dashboard/${currentWsId}/team`} className="group flex items-center space-x-4 px-4 py-3 text-slate-400 hover:bg-white/5 hover:text-white rounded-2xl transition-all border border-transparent hover:border-white/5">
-            <Users size={20} className="group-hover:text-emerald-400 transition-colors" />
-            <span className="font-medium">Team</span>
-          </Link>
+          {[
+            { name: "Dashboard", href: `/dashboard/${currentWsId}`, exact: true, icon: LayoutDashboard, iconColor: "text-blue-400" },
+            { name: "AI Modules", href: `/dashboard/${currentWsId}/modules`, exact: false, icon: Zap, iconColor: "text-yellow-400" },
+            { name: "Projects", href: `/dashboard/${currentWsId}/projects`, exact: false, icon: FolderKanban, iconColor: "text-purple-400" },
+            { name: "Team", href: `/dashboard/${currentWsId}/team`, exact: false, icon: Users, iconColor: "text-emerald-400" },
+          ].map((link) => {
+            const isActive = link.exact 
+              ? pathname === link.href 
+              : pathname.startsWith(link.href);
+              
+            const Icon = link.icon;
+            
+            return (
+              <Link 
+                key={link.name}
+                href={link.href} 
+                className={`group flex items-center space-x-4 px-4 py-3 rounded-2xl transition-all border ${
+                  isActive 
+                    ? "bg-white/10 text-white shadow-[0_0_15px_rgba(59,130,246,0.15)] border-white/10" 
+                    : "text-slate-400 hover:bg-white/5 hover:text-white border-transparent hover:border-white/5"
+                }`}
+              >
+                <Icon size={20} className={`${isActive ? link.iconColor : 'group-hover:' + link.iconColor} transition-colors`} />
+                <span className="font-medium">{link.name}</span>
+              </Link>
+            );
+          })}
         </nav>
         
         <div className="p-4 border-t border-white/5 relative z-10 space-y-2">
-          <Link href={`/dashboard/${currentWsId}/settings`} className="group flex items-center space-x-4 px-4 py-3 text-slate-400 hover:bg-white/5 hover:text-white rounded-2xl transition-all">
-            <Settings size={20} className="group-hover:text-slate-300 transition-colors" />
+          <Link 
+            href={`/dashboard/${currentWsId}/settings`} 
+            className={`group flex items-center space-x-4 px-4 py-3 rounded-2xl transition-all ${
+              pathname.startsWith(`/dashboard/${currentWsId}/settings`)
+                ? "bg-white/10 text-white shadow-[0_0_15px_rgba(59,130,246,0.15)] border border-white/10"
+                : "text-slate-400 hover:bg-white/5 hover:text-white border border-transparent hover:border-white/5"
+            }`}
+          >
+            <Settings size={20} className={`${pathname.startsWith(`/dashboard/${currentWsId}/settings`) ? 'text-slate-300' : 'group-hover:text-slate-300'} transition-colors`} />
             <span className="font-medium text-sm">Settings</span>
           </Link>
-          <Link href="/workspaces" className="group flex items-center space-x-4 px-4 py-3 text-slate-400 hover:bg-red-500/10 hover:text-red-400 rounded-2xl transition-all mt-2">
+          <button onClick={handleSwitchWorkspace} className="w-full text-left group flex items-center space-x-4 px-4 py-3 text-slate-400 hover:bg-red-500/10 hover:text-red-400 rounded-2xl transition-all mt-2 cursor-pointer">
             <LogOut size={20} className="group-hover:text-red-400 transition-colors" />
             <span className="font-medium text-sm">Exit Workspace</span>
-          </Link>
+          </button>
         </div>
       </aside>
 
@@ -156,7 +180,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 </div>
                 <div className="p-2">
                   <Link href={`/dashboard/${currentWsId}/settings`} className="block px-3 py-2 text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">Account Settings</Link>
-                  <Link href="/workspaces" className="block px-3 py-2 text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">Switch Workspace</Link>
+                  <button onClick={handleSwitchWorkspace} className="w-full text-left block px-3 py-2 text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer">Switch Workspace</button>
                 </div>
                 <div className="p-2 border-t border-slate-100">
                   <button onClick={handleSignOut} className="w-full text-left block px-3 py-2 text-sm font-bold text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer">Sign out</button>

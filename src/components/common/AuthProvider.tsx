@@ -39,9 +39,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(newSession?.user ?? null);
       setIsLoading(false);
 
-      if (event === "SIGNED_OUT" || !newSession) {
+      if (event === "SIGNED_IN") {
+        if (window.location.pathname === "/login") {
+          router.replace("/workspaces");
+        }
+      } else if (event === "SIGNED_OUT" || !newSession) {
         // Complete cache flush on sign out
-        router.push("/login");
+        router.replace("/login");
         router.refresh();
       }
     });
@@ -59,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setSession(null);
     setUser(null);
-    router.push("/login");
+    router.replace("/login");
     router.refresh();
   };
 

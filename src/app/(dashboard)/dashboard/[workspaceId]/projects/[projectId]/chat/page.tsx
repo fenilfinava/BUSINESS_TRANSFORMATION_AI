@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Send, Bot, User, Sparkles } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useParams } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 export default function ChatPage() {
   const params = useParams();
@@ -37,9 +38,14 @@ export default function ChatPage() {
     setIsGenerating(true);
     
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
       const response = await fetch("http://localhost:8000/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": session ? `Bearer ${session.access_token}` : ''
+        },
         body: JSON.stringify({
           workspace_id: workspaceId,
           project_id: projectId,

@@ -7,12 +7,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Rocket } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 const projectSchema = z.object({
   name: z.string().min(3, { message: "Project name must be at least 3 characters" }),
   description: z.string().min(10, { message: "Description must be at least 10 characters" }),
-  industry: z.string().min(1, { message: "Please select an industry" }),
-  teamSize: z.string().min(1, { message: "Please select a team size" }),
 });
 
 type ProjectFormValues = z.infer<typeof projectSchema>;
@@ -34,13 +33,28 @@ export function ProjectCreateForm({ workspaceId }: { workspaceId: string }) {
     console.log("Creating project:", data);
     
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
       const res = await fetch('http://localhost:8000/api/projects', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': session ? `Bearer ${session.access_token}` : ''
+        },
         body: JSON.stringify({ ...data, workspace_id: workspaceId })
       });
       if (res.ok) {
-        router.push(`/dashboard/${workspaceId}`);
+        router.replace(`/dashboard/${workspaceId}`);
+        router.refresh();
+      } else {
+        const errorData = await res.json();
+        console.error("FastAPI Rejection Details:", errorData);
+        
+        const errorMessage = Array.isArray(errorData.detail) 
+          ? errorData.detail.map((e: any) => `${e.loc.join('.')}: ${e.msg}`).join(', ') 
+          : (errorData.detail || errorData.message || "Unknown backend error");
+        
+        alert(`Failed: ${errorMessage}`);
       }
     } catch (err) {
       console.error(err);
@@ -66,7 +80,7 @@ export function ProjectCreateForm({ workspaceId }: { workspaceId: string }) {
       </div>
 
       <div>
-        <label htmlFor="description" className="block text-sm font-bold text-slate-700 mb-2">Description</label>
+        <label htmlFor="description" className="block text-sm font-bold text-slate-700 mb-2">Description / Business Context</label>
         <textarea
           id="description"
           rows={4}
@@ -75,35 +89,6 @@ export function ProjectCreateForm({ workspaceId }: { workspaceId: string }) {
           className={inputClass}
         />
         {errors.description && <p className="mt-1.5 text-sm text-red-500 font-medium">{errors.description.message}</p>}
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-        <div>
-          <label htmlFor="industry" className="block text-sm font-bold text-slate-700 mb-2">Industry</label>
-          <select id="industry" {...register("industry")} className={inputClass}>
-            <option value="">Select Industry</option>
-            <option value="finance">Financial Services</option>
-            <option value="healthcare">Healthcare</option>
-            <option value="retail">Retail & E-commerce</option>
-            <option value="manufacturing">Manufacturing</option>
-            <option value="technology">Technology & Software</option>
-            <option value="other">Other</option>
-          </select>
-          {errors.industry && <p className="mt-1.5 text-sm text-red-500 font-medium">{errors.industry.message}</p>}
-        </div>
-
-        <div>
-          <label htmlFor="teamSize" className="block text-sm font-bold text-slate-700 mb-2">Target Team Size</label>
-          <select id="teamSize" {...register("teamSize")} className={inputClass}>
-            <option value="">Select Size</option>
-            <option value="1-10">1-10 employees</option>
-            <option value="11-50">11-50 employees</option>
-            <option value="51-200">51-200 employees</option>
-            <option value="201-500">201-500 employees</option>
-            <option value="500+">500+ employees</option>
-          </select>
-          {errors.teamSize && <p className="mt-1.5 text-sm text-red-500 font-medium">{errors.teamSize.message}</p>}
-        </div>
       </div>
 
       <div className="pt-5 flex justify-end space-x-3">

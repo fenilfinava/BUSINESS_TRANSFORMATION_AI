@@ -65,7 +65,7 @@ export function LoginForm() {
         }
 
         console.log("Sign-up success:", authData);
-        router.push("/workspaces");
+        router.replace("/workspaces");
         router.refresh(); // Forces Next.js to update server components with the new auth session
       } else {
         const { data: authData, error } = await supabase.auth.signInWithPassword({
@@ -81,7 +81,7 @@ export function LoginForm() {
         }
 
         console.log("Sign-in success:", authData);
-        router.push("/workspaces");
+        router.replace("/workspaces");
         router.refresh(); // Forces Next.js to update server components with the new auth session
       }
     } catch (err: any) {

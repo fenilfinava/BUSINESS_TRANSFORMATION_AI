@@ -5,7 +5,7 @@ import uvicorn
 from config import settings
 
 # Import Routers
-from routes import generate, workspaces, projects, discovery, export
+from routes import generate, workspaces, projects, discovery, export, ai_generate
 
 import os
 
@@ -54,6 +54,7 @@ app.include_router(workspaces.router)
 app.include_router(projects.router)
 app.include_router(discovery.router)
 app.include_router(export.router)
+app.include_router(ai_generate.router)
 
 @app.get("/api/health", tags=["Health"])
 async def health_check():

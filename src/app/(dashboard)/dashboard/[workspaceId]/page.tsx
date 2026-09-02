@@ -4,6 +4,7 @@ import Link from "next/link";
 import { PlusCircle, Activity, FileText, CheckCircle, Users } from "lucide-react";
 import { motion } from "framer-motion";
 import { use, useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 
 export default function WorkspaceDashboard(
   props: { params: Promise<{ workspaceId: string }> }
@@ -17,17 +18,37 @@ export default function WorkspaceDashboard(
     team_members: 0
   });
   const [recentProjects, setRecentProjects] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`http://localhost:8000/api/workspaces/${params.workspaceId}/stats`)
-      .then(res => res.json())
-      .then(data => setStats(data))
-      .catch(console.error);
-      
-    fetch(`http://localhost:8000/api/workspaces/${params.workspaceId}/projects`)
-      .then(res => res.json())
-      .then(data => setRecentProjects(data.slice(0, 3)))
-      .catch(console.error);
+    async function loadDashboard() {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {};
+      if (session) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      try {
+        const [statsRes, projectsRes] = await Promise.all([
+          fetch(`http://localhost:8000/api/workspaces/${params.workspaceId}/stats`, { headers }),
+          fetch(`http://localhost:8000/api/workspaces/${params.workspaceId}/projects`, { headers })
+        ]);
+
+        if (statsRes.ok) {
+          const statsData = await statsRes.json();
+          setStats(statsData);
+        }
+        if (projectsRes.ok) {
+          const projectsData = await projectsRes.json();
+          setRecentProjects(projectsData.slice(0, 3));
+        }
+      } catch (err) {
+        console.error("Dashboard load error:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadDashboard();
   }, [params.workspaceId]);
 
   return (
@@ -94,29 +115,36 @@ export default function WorkspaceDashboard(
           <h2 className="text-lg font-semibold text-slate-800">Recent Projects</h2>
         </div>
         <div className="divide-y divide-slate-100">
-          {recentProjects.map((project) => (
-            <Link href={`/dashboard/${params.workspaceId}/projects/${project.id}`} key={project.id} passHref>
-              <motion.div 
-                whileHover={{ backgroundColor: "rgba(248, 250, 252, 1)", x: 4 }}
-                whileTap={{ scale: 0.99 }}
-                className="p-6 flex items-center justify-between cursor-pointer block"
-              >
-                <div>
-                  <h3 className="text-md font-medium text-slate-900">{project.name}</h3>
-                  <p className="text-sm text-slate-500 mt-1">Updated {project.lastUpdated}</p>
-                </div>
-                <div>
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider
-                    ${project.status === 'In Progress' ? 'bg-blue-100 text-blue-800' : 
-                      project.status === 'Planning' ? 'bg-amber-100 text-amber-800' : 
-                      'bg-green-100 text-green-800'}`}
-                  >
-                    {project.status}
-                  </span>
-                </div>
-              </motion.div>
-            </Link>
-          ))}
+          {recentProjects.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="text-slate-500 font-medium">No projects yet.</p>
+              <p className="text-sm text-slate-400 mt-1">Create your first transformation project to get started.</p>
+            </div>
+          ) : (
+            recentProjects.map((project) => (
+              <Link href={`/dashboard/${params.workspaceId}/projects/${project.id}`} key={project.id} passHref>
+                <motion.div 
+                  whileHover={{ backgroundColor: "rgba(248, 250, 252, 1)", x: 4 }}
+                  whileTap={{ scale: 0.99 }}
+                  className="p-6 flex items-center justify-between cursor-pointer block"
+                >
+                  <div>
+                    <h3 className="text-md font-medium text-slate-900">{project.name}</h3>
+                    <p className="text-sm text-slate-500 mt-1">{project.description || 'No description'}</p>
+                  </div>
+                  <div>
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider
+                      ${project.status === 'In Progress' ? 'bg-blue-100 text-blue-800' : 
+                        project.status === 'Planning' ? 'bg-amber-100 text-amber-800' : 
+                        'bg-green-100 text-green-800'}`}
+                    >
+                      {project.status || 'Planning'}
+                    </span>
+                  </div>
+                </motion.div>
+              </Link>
+            ))
+          )}
         </div>
       </motion.div>
     </div>

@@ -4,20 +4,43 @@ import Link from "next/link";
 import { PlusCircle, Search } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 export default function ProjectsListPage() {
   const params = useParams();
+  const router = useRouter();
   const workspaceId = params.workspaceId as string;
   const [allProjects, setAllProjects] = useState<any[]>([]);
 
+  const [isLoading, setIsLoading] = useState(true);
+
   useEffect(() => {
-    if (workspaceId) {
-      fetch(`http://localhost:8000/api/workspaces/${workspaceId}/projects`)
-        .then(res => res.json())
-        .then(data => setAllProjects(data))
-        .catch(err => console.error(err));
+    async function loadProjects() {
+      if (!workspaceId) return;
+      setIsLoading(true);
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      try {
+        const res = await fetch(`http://localhost:8000/api/workspaces/${workspaceId}/projects`, {
+          headers: {
+            'Authorization': session ? `Bearer ${session.access_token}` : ''
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAllProjects(data);
+        } else {
+          console.error("Failed to fetch projects");
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
     }
+    loadProjects();
   }, [workspaceId]);
 
   return (
@@ -61,40 +84,56 @@ export default function ProjectsListPage() {
             <tr>
               <th className="px-6 py-3">Project Name</th>
               <th className="px-6 py-3">Status</th>
-              <th className="px-6 py-3">Industry</th>
-              <th className="px-6 py-3">Team Size</th>
+              <th className="px-6 py-3">Description</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {allProjects.map((proj, i) => (
-              <motion.tr 
-                key={proj.id} 
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.1 }}
-                whileHover={{ backgroundColor: "#f8fafc" }}
-                className="transition-colors group"
-              >
-                <td className="px-6 py-4">
-                  <Link href={`/dashboard/${workspaceId}/projects/${proj.id}`} passHref>
-                    <motion.div whileHover={{ x: 4 }} className="font-semibold text-blue-600 group-hover:text-blue-700 cursor-pointer inline-block">
-                      {proj.name}
-                    </motion.div>
-                  </Link>
+            {isLoading ? (
+              <tr>
+                <td colSpan={3} className="px-6 py-12 text-center text-slate-500">
+                  <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  Loading projects...
                 </td>
-                <td className="px-6 py-4">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                    ${proj.status === 'In Progress' ? 'bg-blue-100 text-blue-800' : 
-                      proj.status === 'Planning' ? 'bg-amber-100 text-amber-800' : 
-                      'bg-green-100 text-green-800'}`}
-                  >
-                    {proj.status}
-                  </span>
+              </tr>
+            ) : allProjects.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="px-6 py-12 text-center">
+                  <div className="bg-slate-50 p-6 rounded-2xl inline-block border border-slate-200">
+                    <p className="text-slate-500 font-medium">No projects found in this workspace.</p>
+                    <p className="text-sm text-slate-400 mt-1">Create your first transformation project to get started.</p>
+                  </div>
                 </td>
-                <td className="px-6 py-4 text-slate-600">{proj.industry}</td>
-                <td className="px-6 py-4 text-slate-600">{proj.team} members</td>
-              </motion.tr>
-            ))}
+              </tr>
+            ) : (
+              allProjects.map((proj, i) => (
+                <motion.tr 
+                  key={proj.id} 
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.1 }}
+                  whileHover={{ backgroundColor: "#f8fafc" }}
+                  className="transition-colors group"
+                >
+                  <td className="px-6 py-4">
+                    <Link href={`/dashboard/${workspaceId}/projects/${proj.id}`} passHref>
+                      <motion.div whileHover={{ x: 4 }} className="font-semibold text-blue-600 group-hover:text-blue-700 cursor-pointer inline-block">
+                        {proj.name}
+                      </motion.div>
+                    </Link>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                      ${proj.status === 'In Progress' ? 'bg-blue-100 text-blue-800' : 
+                        proj.status === 'Planning' ? 'bg-amber-100 text-amber-800' : 
+                        'bg-green-100 text-green-800'}`}
+                    >
+                      {proj.status || 'Planning'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-slate-600 text-sm truncate max-w-xs">{proj.description || '—'}</td>
+                </motion.tr>
+              ))
+            )}
           </tbody>
         </table>
       </motion.div>

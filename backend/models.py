@@ -13,8 +13,6 @@ class GenerationRequest(BaseModel):
 class ProjectCreateRequest(BaseModel):
     name: str
     description: str
-    industry: str
-    teamSize: str
     workspace_id: str
 
 class WorkspaceCreate(BaseModel):
@@ -62,10 +60,10 @@ class WorkspaceResponse(BaseModel):
 class ProjectResponse(BaseModel):
     id: str
     name: str
-    status: str
-    industry: str
-    team: int
-    lastUpdated: str
+    description: Optional[str] = None
+    status: Optional[str] = "Planning"
+    workspace_id: Optional[str] = None
+    created_at: Optional[Any] = None
 
 class WorkspaceStats(BaseModel):
     active_projects: int

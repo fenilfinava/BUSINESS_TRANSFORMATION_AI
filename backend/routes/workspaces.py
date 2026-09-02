@@ -36,5 +36,5 @@ async def get_stats(workspace_id: str):
     return await get_workspace_stats(workspace_id)
 
 @router.get("/{workspace_id}/team", response_model=List[TeamMember])
-async def get_team(workspace_id: str):
+async def get_team(workspace_id: str, user_id: str = Depends(get_current_user)):
     return await get_team_members(workspace_id)

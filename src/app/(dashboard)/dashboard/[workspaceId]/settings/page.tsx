@@ -3,10 +3,27 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Save, CheckCircle2, User, Building, Cpu, Shield } from "lucide-react";
+import { useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 
 export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+  const [userName, setUserName] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  
+  useEffect(() => {
+    async function loadUser() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserEmail(user.email || "");
+        setUserName(user.user_metadata?.full_name || "");
+      }
+      setIsLoading(false);
+    }
+    loadUser();
+  }, []);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,11 +59,11 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">Full Name</label>
-                <input required type="text" defaultValue="Admin User" className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none" />
+                <input required type="text" value={userName} onChange={e => setUserName(e.target.value)} placeholder="Full Name" className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">Email Address</label>
-                <input required type="email" defaultValue="user@example.com" className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none" />
+                <input required type="email" value={userEmail} disabled className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-100 text-slate-500 cursor-not-allowed transition-all outline-none" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">Role</label>

@@ -1,6 +1,21 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import { LoginForm } from "@/components/features/auth/LoginForm";
 
 export default function LoginPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        router.replace("/workspaces");
+      }
+    });
+  }, [router]);
+
   return (
     <div>
       <div className="mb-8">

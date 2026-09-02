@@ -31,7 +31,7 @@ export default function WorkspacesPage() {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (!session || sessionError) {
           console.log("No active session found on workspaces page. Redirecting to login...");
-          router.push('/login');
+          router.replace('/login');
           return;
         }
 
@@ -70,7 +70,7 @@ export default function WorkspacesPage() {
 
       if (!session || sessionError) {
         console.error("No active session found. Redirecting to login...");
-        router.push('/login');
+        router.replace('/login');
         return;
       }
       
@@ -94,7 +94,7 @@ export default function WorkspacesPage() {
 
       // Dynamic redirection to the real workspace ID
       if (newWs?.id) {
-        router.push(`/dashboard/${newWs.id}`);
+        router.replace(`/dashboard/${newWs.id}`);
         router.refresh();
       }
     } catch (err: any) {
