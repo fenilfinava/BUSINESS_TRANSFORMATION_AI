@@ -28,10 +28,19 @@ export default function WorkspacesPage() {
     async function loadWorkspaces() {
       setIsLoading(true);
       try {
-        const { data, error } = await supabase
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        let query = supabase
           .from('workspaces')
           .select('*')
           .order('created_at', { ascending: false });
+          
+        if (user) {
+          // If your DB schema uses owner_id instead of user_id, change the string below
+          query = query.eq('owner_id', user.id);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
           console.error("Error fetching workspaces from Supabase:", error);
