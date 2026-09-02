@@ -69,19 +69,44 @@ export default function ModulesPage() {
   const [selectedVersionId, setSelectedVersionId] = useState<Record<string, string>>({});
   const [loadingVersions, setLoadingVersions] = useState<Record<string, boolean>>({});
 
+  const isValidUUID = (val?: string) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
   // Fetch projects for this workspace on mount
   useEffect(() => {
     async function loadProjects() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       try {
-        const res = await fetch(`http://localhost:8000/api/workspaces/${workspaceId}/projects`, {
-          headers: { 'Authorization': `Bearer ${session.access_token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setProjects(data);
-          if (data.length > 0) setSelectedProject(data[0].id);
+        let loadedProjects: Project[] = [];
+
+        // If workspaceId is a valid UUID, fetch from workspace endpoint
+        if (isValidUUID(workspaceId)) {
+          const res = await fetch(`http://localhost:8000/api/workspaces/${workspaceId}/projects`, {
+            headers: { 'Authorization': `Bearer ${session.access_token}` }
+          });
+          if (res.ok) {
+            loadedProjects = await res.json();
+          }
+        }
+
+        // If no projects found or workspaceId was a placeholder, load user's real projects directly
+        if (!loadedProjects || loadedProjects.length === 0) {
+          const { data: sbProjects } = await supabase
+            .from('projects')
+            .select('id, name, description')
+            .order('created_at', { ascending: false });
+          if (sbProjects) {
+            loadedProjects = sbProjects;
+          }
+        }
+
+        // Strictly enforce ONLY real UUIDs - never allow mock IDs like "1", "test", "default"
+        const validProjects = (loadedProjects || []).filter(p => isValidUUID(p.id));
+        setProjects(validProjects);
+        if (validProjects.length > 0) {
+          setSelectedProject(validProjects[0].id);
+        } else {
+          setSelectedProject("");
         }
       } catch (err) {
         console.error("Failed to load projects:", err);
@@ -92,7 +117,7 @@ export default function ModulesPage() {
 
   // Load versions for a specific module & project
   const loadVersionsForModule = async (slug: string, projectId: string) => {
-    if (!slug || !projectId) return;
+    if (!slug || !projectId || !isValidUUID(projectId)) return;
     setLoadingVersions(prev => ({ ...prev, [slug]: true }));
     try {
       const { data, error } = await supabase
@@ -191,10 +216,17 @@ export default function ModulesPage() {
     setActiveModule(mod);
   };
 
-  // Non-blocking, cancellable module-specific generation call
   const handleGenerate = async (targetModuleSlug?: string) => {
     const slug = targetModuleSlug || activeModule?.slug;
-    if (!slug || !selectedProject) return;
+    if (!slug) return;
+
+    if (!selectedProject || !isValidUUID(selectedProject)) {
+      setModuleErrors(prev => ({
+        ...prev,
+        [slug]: "Invalid project ID. Please select a valid project with a real UUID."
+      }));
+      return;
+    }
 
     // Pull current project description/context
     const currentProject = projects.find(p => p.id === selectedProject);
@@ -357,17 +389,32 @@ export default function ModulesPage() {
               <div className="p-6 flex-1 overflow-y-auto space-y-5">
                 {/* Project Selector */}
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">Select Project</label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-bold text-slate-700">Select Project</label>
+                    <Link
+                      href={`/dashboard/${workspaceId || 'workspaces'}/projects/new`}
+                      className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+                    >
+                      + New Project
+                    </Link>
+                  </div>
                   {projects.length === 0 ? (
-                    <p className="text-sm text-slate-500 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                      No projects found. Create a project first to use AI modules.
-                    </p>
+                    <div className="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-xl text-xs space-y-2">
+                      <p className="font-bold">No valid projects found in this workspace.</p>
+                      <p>Create a project first so AI blueprints can be attached to a real project ID.</p>
+                      <Link
+                        href={`/dashboard/${workspaceId || 'workspaces'}/projects/new`}
+                        className="inline-block px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition-colors"
+                      >
+                        + Create New Project
+                      </Link>
+                    </div>
                   ) : (
                     <div className="relative">
                       <select
                         value={selectedProject}
                         onChange={(e) => setSelectedProject(e.target.value)}
-                        className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-slate-900 sm:text-sm appearance-none"
+                        className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-slate-900 sm:text-sm appearance-none cursor-pointer"
                       >
                         {projects.map(p => (
                           <option key={p.id} value={p.id}>{p.name}</option>

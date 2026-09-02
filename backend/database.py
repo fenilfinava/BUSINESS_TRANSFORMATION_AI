@@ -102,13 +102,28 @@ async def get_project(project_id: str) -> Dict[str, Any]:
 async def create_project(data: Dict[str, Any]) -> Dict[str, Any]:
     client = get_supabase_client()
     try:
+        ws_id = data.get("workspace_id")
+        if ws_id:
+            import uuid
+            try:
+                uuid.UUID(str(ws_id))
+            except (ValueError, AttributeError):
+                raise HTTPException(status_code=400, detail="Invalid workspace ID format. Must be a valid UUID.")
         response = client.table("projects").insert(data).execute()
         return response.data[0] if response.data else {}
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error creating project: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create project: {e}")
 
 async def save_blueprint(project_id: str, module_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    import uuid
+    try:
+        uuid.UUID(str(project_id))
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="Invalid project ID format. Must be a valid UUID.")
+
     client = get_supabase_client()
     try:
         # Phase 1 & 2: Append-only insert with modern and legacy field coverage
@@ -136,6 +151,12 @@ async def save_blueprint(project_id: str, module_type: str, data: Dict[str, Any]
             raise e2
 
 async def get_blueprints(project_id: str, module_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    import uuid
+    try:
+        uuid.UUID(str(project_id))
+    except (ValueError, AttributeError):
+        return []
+
     client = get_supabase_client()
     try:
         query = client.table("blueprints").select("*").eq("project_id", project_id)

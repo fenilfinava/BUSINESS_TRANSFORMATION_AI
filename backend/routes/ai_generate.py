@@ -124,6 +124,16 @@ async def generate_ai_content(request: AIGenerateRequest, user_id: str = Depends
     Universal AI generation endpoint.
     Routes to specialized Gemini prompts per module_type, parses structured JSON, and saves blueprint.
     """
+    # Validation Check: Verify project_id is a valid UUID
+    import uuid
+    try:
+        uuid.UUID(str(request.project_id))
+    except (ValueError, AttributeError):
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid project ID format. Must be a valid UUID."
+        )
+
     if not gemini_model:
         raise HTTPException(
             status_code=503, 
@@ -248,6 +258,11 @@ async def get_project_blueprints(
     user_id: str = Depends(get_current_user)
 ):
     """Fetch all saved blueprints (version history) for a project, optionally filtered by module."""
+    import uuid
+    try:
+        uuid.UUID(str(project_id))
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="Invalid project ID format. Must be a valid UUID.")
     raw_blueprints = await get_blueprints(project_id, module_type)
     return [normalize_blueprint(b) for b in raw_blueprints]
 
@@ -259,6 +274,11 @@ async def get_latest_blueprint(
     user_id: str = Depends(get_current_user)
 ):
     """Fetch the latest blueprint for a project module."""
+    import uuid
+    try:
+        uuid.UUID(str(project_id))
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="Invalid project ID format. Must be a valid UUID.")
     raw_blueprints = await get_blueprints(project_id, module_type)
     if not raw_blueprints:
         raise HTTPException(status_code=404, detail="No blueprint found for this module.")

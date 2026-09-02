@@ -28,6 +28,8 @@ export function ProjectCreateForm({ workspaceId }: { workspaceId: string }) {
     resolver: zodResolver(projectSchema),
   });
 
+  const isValidUUID = (val?: string) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
   const onSubmit = async (data: ProjectFormValues) => {
     setIsLoading(true);
     console.log("Creating project:", data);
@@ -35,16 +37,31 @@ export function ProjectCreateForm({ workspaceId }: { workspaceId: string }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
+      // Resolve a real workspace UUID if a placeholder or invalid ID was passed
+      let targetWsId = workspaceId;
+      if (!isValidUUID(targetWsId)) {
+        const { data: wsData } = await supabase.from('workspaces').select('id').limit(1);
+        if (wsData && wsData.length > 0 && isValidUUID(wsData[0].id)) {
+          targetWsId = wsData[0].id;
+        } else {
+          alert("Please create or select a valid workspace first before creating a project.");
+          setIsLoading(false);
+          return;
+        }
+      }
+      
       const res = await fetch('http://localhost:8000/api/projects', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': session ? `Bearer ${session.access_token}` : ''
         },
-        body: JSON.stringify({ ...data, workspace_id: workspaceId })
+        body: JSON.stringify({ ...data, workspace_id: targetWsId })
       });
       if (res.ok) {
-        router.replace(`/dashboard/${workspaceId}`);
+        const createdProject = await res.json();
+        console.log("Successfully created project with real UUID:", createdProject.id);
+        router.replace(`/dashboard/${targetWsId}`);
         router.refresh();
       } else {
         const errorData = await res.json();
