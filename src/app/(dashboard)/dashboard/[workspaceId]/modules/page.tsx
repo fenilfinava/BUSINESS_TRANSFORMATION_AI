@@ -37,10 +37,11 @@ export default function ModulesPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [activeModule, setActiveModule] = useState<typeof aiModules[0] | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedContent, setGeneratedContent] = useState<string>("");
-  const [generatedFormat, setGeneratedFormat] = useState<string>("");
-  const [error, setError] = useState<string>("");
+
+  // Per-module loading, results, and errors for true concurrency
+  const [loadingModules, setLoadingModules] = useState<Record<string, boolean>>({});
+  const [moduleResults, setModuleResults] = useState<Record<string, { content: string; format: string }>>({});
+  const [moduleErrors, setModuleErrors] = useState<Record<string, string>>({});
 
   // Fetch projects for this workspace on mount
   useEffect(() => {
@@ -65,24 +66,26 @@ export default function ModulesPage() {
 
   const handleLaunchModule = (mod: typeof aiModules[0]) => {
     setActiveModule(mod);
-    setGeneratedContent("");
-    setGeneratedFormat("");
-    setError("");
   };
 
-  const handleGenerate = async () => {
-    if (!activeModule || !selectedProject) return;
-    setIsGenerating(true);
-    setGeneratedContent("");
-    setError("");
+  // Non-blocking, module-specific generation call
+  const handleGenerate = async (targetModuleSlug?: string) => {
+    const slug = targetModuleSlug || activeModule?.slug;
+    if (!slug || !selectedProject) return;
+
+    // Set only this module as loading
+    setLoadingModules(prev => ({ ...prev, [slug]: true }));
+    setModuleErrors(prev => ({ ...prev, [slug]: "" }));
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        setError("No active session. Please log in again.");
+        setModuleErrors(prev => ({ ...prev, [slug]: "No active session. Please log in again." }));
+        setLoadingModules(prev => ({ ...prev, [slug]: false }));
         return;
       }
 
+      // Non-blocking fetch for this specific module
       const res = await fetch("http://localhost:8000/api/ai/generate", {
         method: "POST",
         headers: {
@@ -91,24 +94,26 @@ export default function ModulesPage() {
         },
         body: JSON.stringify({
           project_id: selectedProject,
-          module_type: activeModule.slug
+          module_type: slug
         })
       });
 
       if (!res.ok) {
         const errData = await res.json();
-        setError(errData.detail || "Generation failed.");
+        setModuleErrors(prev => ({ ...prev, [slug]: errData.detail || "Generation failed." }));
         return;
       }
 
       const data = await res.json();
-      setGeneratedContent(data.content);
-      setGeneratedFormat(data.format);
+      setModuleResults(prev => ({
+        ...prev,
+        [slug]: { content: data.content, format: data.format }
+      }));
     } catch (err: any) {
-      setError(err.message || "Network error.");
+      setModuleErrors(prev => ({ ...prev, [slug]: err.message || "Network error." }));
       console.error(err);
     } finally {
-      setIsGenerating(false);
+      setLoadingModules(prev => ({ ...prev, [slug]: false }));
     }
   };
 
@@ -122,6 +127,9 @@ export default function ModulesPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {aiModules.map((mod, i) => {
           const Icon = mod.icon;
+          const isModLoading = !!loadingModules[mod.slug];
+          const hasResult = !!moduleResults[mod.slug];
+
           return (
             <motion.div
               key={mod.id}
@@ -130,7 +138,7 @@ export default function ModulesPage() {
               transition={{ delay: i * 0.05 }}
               whileHover={{ y: -5, scale: 1.02 }}
               onClick={() => handleLaunchModule(mod)}
-              className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-xl hover:shadow-blue-900/5 transition-all group cursor-pointer flex flex-col h-full"
+              className={`bg-white rounded-3xl p-6 shadow-sm border ${isModLoading ? 'border-amber-300 ring-2 ring-amber-400/20' : hasResult ? 'border-emerald-300' : 'border-slate-200'} hover:shadow-xl hover:shadow-blue-900/5 transition-all group cursor-pointer flex flex-col h-full relative overflow-hidden`}
             >
               <div className="flex-1">
                 <div className={`w-14 h-14 rounded-2xl ${mod.bg} flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
@@ -139,8 +147,20 @@ export default function ModulesPage() {
                 <h3 className="text-xl font-bold text-slate-800 mb-3 group-hover:text-blue-600 transition-colors">{mod.name}</h3>
                 <p className="text-slate-500 text-sm leading-relaxed">{mod.desc}</p>
               </div>
-              <div className="mt-6 flex items-center text-sm font-bold text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                Launch Module <ArrowRight size={16} className="ml-1 group-hover:translate-x-1 transition-transform" />
+              <div className="mt-6 flex items-center justify-between text-sm font-bold">
+                {isModLoading ? (
+                  <span className="flex items-center text-amber-600 animate-pulse">
+                    <Loader2 size={16} className="animate-spin mr-1.5" /> Generating in background...
+                  </span>
+                ) : hasResult ? (
+                  <span className="flex items-center text-emerald-600">
+                    <Sparkles size={16} className="mr-1.5" /> Ready (View Blueprint)
+                  </span>
+                ) : (
+                  <span className="flex items-center text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Launch Module <ArrowRight size={16} className="ml-1 group-hover:translate-x-1 transition-transform" />
+                  </span>
+                )}
               </div>
             </motion.div>
           )
@@ -155,7 +175,7 @@ export default function ModulesPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => { setActiveModule(null); setGeneratedContent(""); }}
+              onClick={() => setActiveModule(null)}
               className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
             />
             <motion.div
@@ -176,7 +196,7 @@ export default function ModulesPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => { setActiveModule(null); setGeneratedContent(""); }}
+                  onClick={() => setActiveModule(null)}
                   className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
                 >
                   <X size={20} />
@@ -212,26 +232,26 @@ export default function ModulesPage() {
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={handleGenerate}
-                  disabled={isGenerating || !selectedProject || projects.length === 0}
-                  className="w-full flex items-center justify-center py-3.5 px-4 border border-transparent shadow-lg shadow-blue-500/30 text-sm font-bold rounded-xl text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 transition-all"
+                  onClick={() => handleGenerate(activeModule.slug)}
+                  disabled={loadingModules[activeModule.slug] || !selectedProject || projects.length === 0}
+                  className="w-full flex items-center justify-center py-3.5 px-4 border border-transparent shadow-lg shadow-blue-500/30 text-sm font-bold rounded-xl text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 transition-all cursor-pointer"
                 >
-                  {isGenerating ? (
-                    <><Loader2 size={18} className="animate-spin mr-2" /> Generating with Gemini AI...</>
+                  {loadingModules[activeModule.slug] ? (
+                    <><Loader2 size={18} className="animate-spin mr-2" /> Generating with Gemini AI (Async)...</>
                   ) : (
                     <><Sparkles size={18} className="mr-2" /> Generate Blueprint</>
                   )}
                 </motion.button>
 
                 {/* Error Display */}
-                {error && (
+                {moduleErrors[activeModule.slug] && (
                   <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm font-medium">
-                    {error}
+                    {moduleErrors[activeModule.slug]}
                   </div>
                 )}
 
                 {/* Generated Content */}
-                {generatedContent && (
+                {moduleResults[activeModule.slug] && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -239,17 +259,17 @@ export default function ModulesPage() {
                   >
                     <div className="px-5 py-3 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                        AI Generated Output — {generatedFormat}
+                        AI Generated Output — {moduleResults[activeModule.slug].format}
                       </span>
                       <button
-                        onClick={() => navigator.clipboard.writeText(generatedContent)}
+                        onClick={() => navigator.clipboard.writeText(moduleResults[activeModule.slug].content)}
                         className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors"
                       >
                         Copy
                       </button>
                     </div>
                     <pre className="p-5 text-sm text-slate-800 whitespace-pre-wrap overflow-x-auto max-h-[400px] overflow-y-auto leading-relaxed font-mono">
-                      {generatedContent}
+                      {moduleResults[activeModule.slug].content}
                     </pre>
                   </motion.div>
                 )}

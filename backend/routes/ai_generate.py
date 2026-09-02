@@ -162,10 +162,10 @@ Please provide a comprehensive, professional-grade output formatted as a valid J
 - "key_recommendations": A list of top recommendations
 """
 
-    # 4. Call Gemini
+    # 4. Call Gemini Asynchronously
     try:
         print(f"🤖 Calling Gemini for module '{request.module_type}' on project '{project_name}'...")
-        response = gemini_model.generate_content(
+        response = await gemini_model.generate_content_async(
             full_prompt,
             generation_config=genai.GenerationConfig(
                 response_mime_type="application/json",
