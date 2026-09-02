@@ -1,3 +1,14 @@
+import os
+from dotenv import load_dotenv, find_dotenv
+
+# Automatically search parent directories for the .env file
+env_file = find_dotenv()
+if env_file:
+    print(f"SUCCESS: Found .env file at {env_file}")
+    load_dotenv(env_file, override=True)
+else:
+    print("CRITICAL ERROR: No .env file found anywhere in the directory tree.")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager

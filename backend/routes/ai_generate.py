@@ -8,27 +8,34 @@ import json
 
 router = APIRouter(prefix="/api/ai", tags=["AI Generation"])
 
-from dotenv import load_dotenv
 import os
+from dotenv import load_dotenv, find_dotenv
 
-# Explicitly load .env from the current directory (backend)
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+# Automatically search parent directories for the .env file
+env_file = find_dotenv()
 
-# --- Gemini Client Initialization ---
+if not env_file:
+    print("CRITICAL ERROR: No .env file found anywhere in the directory tree.")
+else:
+    print(f"SUCCESS: Found .env file at {env_file}")
+    load_dotenv(env_file, override=True)
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
 print(f"DEBUG: Gemini Key Loaded: {bool(GEMINI_API_KEY)}")
 
-if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY is missing from the environment variables. Please check your .env file.")
-
 gemini_model = None
+gemini_error = None
 try:
     import google.generativeai as genai
-    genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel("gemini-1.5-pro")
-    print("✅ Gemini AI initialized successfully")
+    if GEMINI_API_KEY:
+        genai.configure(api_key=GEMINI_API_KEY)
+        gemini_model = genai.GenerativeModel("gemini-1.5-pro")
+        print("✅ Gemini AI initialized successfully")
+    else:
+        gemini_error = "GEMINI_API_KEY is missing from environment variables."
+        print("⚠️ GEMINI_API_KEY not found.")
 except ImportError:
+    gemini_error = "google-generativeai package is not installed in the active Python environment. Run: pip install google-generativeai"
     print("⚠️ google-generativeai not installed. Run: pip install google-generativeai")
 
 # --- Request/Response Models ---
@@ -108,7 +115,10 @@ async def generate_ai_content(request: AIGenerateRequest, user_id: str = Depends
     Fetches project context, constructs module-specific prompt, calls Gemini, saves blueprint.
     """
     if not gemini_model:
-        raise HTTPException(status_code=503, detail="Gemini AI is not configured. Check GEMINI_API_KEY.")
+        raise HTTPException(
+            status_code=503, 
+            detail=gemini_error or "Gemini AI is not configured. Check GEMINI_API_KEY."
+        )
 
     # 1. Validate module_type
     module_config = MODULE_PROMPTS.get(request.module_type)
