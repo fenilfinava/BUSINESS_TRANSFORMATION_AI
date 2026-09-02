@@ -7,10 +7,26 @@ from config import settings
 # Import Routers
 from routes import generate, workspaces, projects, discovery, export
 
+import os
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
     print("Starting ArchFlow AI Backend...")
+    
+    # Environment Variable Validation
+    supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+    llm_key = os.getenv("OPENAI_API_KEY") or os.getenv("GEMINI_API_KEY")
+    
+    if not supabase_key:
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("WARNING: SUPABASE_SERVICE_KEY is MISSING from environment variables!")
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    if not llm_key:
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("WARNING: LLM API KEY (OPENAI or GEMINI) is MISSING!")
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        
     if settings.mock_mode:
         print("Running in MOCK_MODE = True. Mock data will be returned.")
     yield

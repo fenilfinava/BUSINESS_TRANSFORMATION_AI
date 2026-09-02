@@ -10,10 +10,15 @@ async def list_workspaces():
     return await get_workspaces()
 
 @router.post("", response_model=WorkspaceResponse)
-async def add_workspace(request: WorkspaceCreateRequest, user_id: str = Depends(get_current_user)):
+def add_workspace(request: WorkspaceCreateRequest, user_id: str = Depends(get_current_user)):
     try:
-        return await create_workspace(request.name, request.description, owner_id=user_id)
+        print("1. Validating token... Token valid.")
+        print(f"2. Calling create_workspace for {request.name}...")
+        workspace = create_workspace(request.name, request.description, owner_id=user_id)
+        print("5. Route finished, returning workspace.")
+        return workspace
     except Exception as e:
+        print(f"Route error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create workspace: {str(e)}")
 
 @router.get("/{workspace_id}", response_model=WorkspaceResponse)

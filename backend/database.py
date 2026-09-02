@@ -1,4 +1,9 @@
 import os
+from dotenv import load_dotenv
+
+# Explicitly load .env file
+load_dotenv()
+
 from supabase import create_client, Client
 from config import settings
 from typing import Dict, Any, List, Optional
@@ -17,7 +22,9 @@ def get_supabase_client() -> Client:
             # For mock mode, we'll bypass actual Supabase calls
             pass
         else:
-            supabase = create_client(settings.supabase_url, settings.supabase_service_key)
+            url = os.getenv("SUPABASE_URL") or settings.supabase_url
+            key = os.getenv("SUPABASE_SERVICE_KEY") or settings.supabase_service_key
+            supabase = create_client(url, key)
     return supabase
 
 security = HTTPBearer()
@@ -27,14 +34,18 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         return str(uuid.uuid4())
     
     token = credentials.credentials
+    print(f"Header received: Bearer {token}")
+    
     client = get_supabase_client()
     try:
         user_response = client.auth.get_user(token)
         if not user_response.user:
+            print("Token validation failed: No user returned")
             raise HTTPException(status_code=401, detail="Invalid token")
         return user_response.user.id
     except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Authentication error: {str(e)}")
+        print(f"Token validation failed: {str(e)}")
+        raise HTTPException(status_code=401, detail=f"Supabase Auth Error: {str(e)}")
 
 async def get_workspaces(organization_id: str = "org_1") -> List[Dict[str, Any]]:
     if settings.mock_mode:
@@ -54,30 +65,37 @@ async def get_workspace(workspace_id: str) -> Dict[str, Any]:
     response = client.table("workspaces").select("*").eq("id", workspace_id).execute()
     return response.data[0] if response.data else {}
 
-async def create_workspace(name: str, description: Optional[str] = None, owner_id: Optional[str] = None, organization_id: str = "org_1") -> Dict[str, Any]:
+def create_workspace(name: str, description: Optional[str] = None, owner_id: Optional[str] = None, organization_id: str = "org_1") -> Dict[str, Any]:
+    print("3. Checking for existing organization...")
     if settings.mock_mode:
         return {"id": str(uuid.uuid4()), "name": name, "role": "Admin", "icon": "🚀", "color": "from-purple-500 to-pink-600"}
     
     client = get_supabase_client()
-    orgs = client.table("organizations").select("id").limit(1).execute()
-    if not orgs.data:
-        new_org_data = {"name": "Default Org", "industry": "Technology"}
-        if owner_id:
-            new_org_data["owner_id"] = owner_id
-        new_org = client.table("organizations").insert(new_org_data).execute()
-        real_org_id = new_org.data[0]["id"]
-    else:
-        real_org_id = orgs.data[0]["id"]
+    try:
+        orgs = client.table("organizations").select("id").limit(1).execute()
+        if not orgs.data:
+            print("  - No org found, creating Default Org...")
+            new_org_data = {"name": "Default Org", "industry": "Technology"}
+            if owner_id:
+                new_org_data["owner_id"] = owner_id
+            new_org = client.table("organizations").insert(new_org_data).execute()
+            real_org_id = new_org.data[0]["id"]
+        else:
+            real_org_id = orgs.data[0]["id"]
 
-    data = {"name": name, "organization_id": real_org_id}
-    if owner_id:
-        data["owner_id"] = owner_id
-    if description:
-        # We assume description goes somewhere if needed, but the original payload didn't have it in the schema, just passed it in.
-        pass
-        
-    response = client.table("workspaces").insert(data).execute()
-    return response.data[0] if response.data else {}
+        print("4. Inserting workspace...")
+        data = {"name": name, "organization_id": real_org_id}
+        if owner_id:
+            data["owner_id"] = owner_id
+        if description:
+            pass
+            
+        response = client.table("workspaces").insert(data).execute()
+        print("  - Workspace inserted successfully!")
+        return response.data[0] if response.data else {}
+    except Exception as e:
+        print(f"Database insertion failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Supabase DB Error: {str(e)}")
 
 async def get_projects(workspace_id: str) -> List[Dict[str, Any]]:
     if settings.mock_mode:
