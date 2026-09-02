@@ -143,7 +143,12 @@ async def get_workspace_stats(workspace_id: str) -> Dict[str, Any]:
             "completed_milestones": 32,
             "team_members": 8
         }
-    return {}
+    return {
+        "active_projects": 0,
+        "ai_recommendations": 0,
+        "completed_milestones": 0,
+        "team_members": 1
+    }
 
 async def get_team_members(workspace_id: str) -> List[Dict[str, Any]]:
     if settings.mock_mode:
