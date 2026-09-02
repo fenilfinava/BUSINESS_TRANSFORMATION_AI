@@ -28,6 +28,13 @@ export default function WorkspacesPage() {
     async function loadWorkspaces() {
       setIsLoading(true);
       try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (!session || sessionError) {
+          console.log("No active session found on workspaces page. Redirecting to login...");
+          router.push('/login');
+          return;
+        }
+
         const { data, error } = await supabase
           .from('workspaces')
           .select('*')
@@ -46,7 +53,7 @@ export default function WorkspacesPage() {
     }
 
     loadWorkspaces();
-  }, []);
+  }, [router]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [name, setName] = useState("");
@@ -58,13 +65,19 @@ export default function WorkspacesPage() {
     
     setIsCreating(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (!session || sessionError) {
+        console.error("No active session found. Redirecting to login...");
+        router.push('/login');
+        return;
+      }
       
       const res = await fetch('http://localhost:8000/api/workspaces', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token || ''}`
+          'Authorization': `Bearer ${session.access_token}`
         },
         body: JSON.stringify({ name: name })
       });
