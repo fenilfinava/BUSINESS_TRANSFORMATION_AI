@@ -38,6 +38,7 @@ export default function WorkspacesPage() {
         const { data, error } = await supabase
           .from('workspaces')
           .select('*')
+          .eq('owner_id', session.user.id)
           .order('created_at', { ascending: false });
 
         if (error) {
