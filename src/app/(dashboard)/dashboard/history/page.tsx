@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { useWorkspace } from "@/context/WorkspaceContext";
 
 interface BlueprintItem {
   id: string;
@@ -144,6 +145,7 @@ function getModuleInfo(moduleType: string) {
 }
 
 export default function HistoryDashboardPage() {
+  const { activeWorkspace, isLoadingWorkspaces } = useWorkspace();
   const [blueprints, setBlueprints] = useState<BlueprintItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -153,60 +155,55 @@ export default function HistoryDashboardPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedContent, setCopiedContent] = useState(false);
 
-  // TASK 2: Fetch all blueprints associated with user's projects
+  // Fetch blueprints scoped to the activeWorkspace
   useEffect(() => {
-    async function fetchHistory() {
-      setLoading(true);
-      try {
-        // 1. Check authenticated user session
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        console.log("DEBUG: Current Authenticated User ID:", user?.id);
-
-        if (!user) {
-          console.error("DEBUG ERROR: No active Supabase session found when querying history.", userError);
+    const fetchHistory = async () => {
+      // 1. Wait for active workspace to be loaded
+      if (!activeWorkspace?.id) {
+        if (!isLoadingWorkspaces) {
           setBlueprints([]);
           setLoading(false);
-          return;
         }
+        return;
+      }
 
-        // 2. Fetch blueprints without complex foreign joins first to isolate join issues
+      setLoading(true);
+
+      try {
+        // 2. Fetch blueprints filtered by the active workspace's ID using an inner join
         const { data, error } = await supabase
           .from('blueprints')
-          .select('*')
+          .select(`
+            id,
+            module_type,
+            created_at,
+            generated_content,
+            projects!inner (
+              id,
+              name,
+              workspace_id
+            )
+          `)
+          .eq('projects.workspace_id', activeWorkspace.id)
           .order('created_at', { ascending: false });
 
-        console.log("DEBUG: Raw Blueprints fetched from Supabase:", data);
         if (error) {
-          console.error("DEBUG ERROR: Supabase query failed:", error);
-        }
-
-        // Project map cache for displaying real project names
-        let projectMap: Record<string, string> = {};
-        try {
-          const { data: projectsData } = await supabase.from('projects').select('id, name');
-          if (projectsData) {
-            projectsData.forEach((p: any) => {
-              projectMap[p.id] = p.name;
-            });
-          }
-        } catch (pErr) {
-          console.warn("Could not load project names for history mapping:", pErr);
+          console.error("Error fetching scoped history from Supabase:", error);
         }
 
         let rawList = data || [];
 
-        // Fallback: If Supabase query returns empty or failed (e.g. restrictive RLS before SQL migration), fetch via authenticated FastAPI backend
+        // Fallback: If Supabase query returns empty or failed (e.g. restrictive RLS), fetch via authenticated FastAPI backend
         if (rawList.length === 0) {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.access_token) {
             try {
-              console.log("DEBUG: Attempting backend fallback fetch at http://localhost:8000/api/ai/blueprints");
-              const res = await fetch("http://localhost:8000/api/ai/blueprints", {
+              console.log(`DEBUG: Attempting backend fallback fetch for workspace ${activeWorkspace.id}`);
+              const res = await fetch(`http://localhost:8000/api/ai/blueprints?workspace_id=${activeWorkspace.id}`, {
                 headers: { Authorization: `Bearer ${session.access_token}` }
               });
               if (res.ok) {
                 const backendData = await res.json();
-                console.log("DEBUG: Blueprints fetched from backend fallback:", backendData);
                 if (backendData && backendData.length > 0) {
                   rawList = backendData;
                 }
@@ -221,7 +218,7 @@ export default function HistoryDashboardPage() {
           const rawContent = row.generated_content || row.data || {};
           const moduleKey = row.module_type || row.module_name || "unknown";
           const proj = Array.isArray(row.projects) ? row.projects[0] : row.projects;
-          const projectName = proj?.name || (row.project_id && projectMap[row.project_id]) || "General Project";
+          const projectName = proj?.name || "General Project";
           const projectId = proj?.id || row.project_id;
 
           let title = rawContent.title || "";
@@ -250,7 +247,6 @@ export default function HistoryDashboardPage() {
           };
         });
 
-        // 3. Set state
         setBlueprints(mapped);
       } catch (err) {
         console.error("Error loading blueprint history:", err);
@@ -258,10 +254,10 @@ export default function HistoryDashboardPage() {
       } finally {
         setLoading(false);
       }
-    }
+    };
 
     fetchHistory();
-  }, []);
+  }, [activeWorkspace?.id, isLoadingWorkspaces]);
 
   // Filter options
   const projectOptions = useMemo(() => {
@@ -333,7 +329,7 @@ export default function HistoryDashboardPage() {
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">Generation History</h1>
           </div>
           <p className="text-slate-500 text-sm">
-            Browse, inspect, and export all historical AI-generated blueprints and architectural versions.
+            Browse, inspect, and export AI blueprints for <span className="font-semibold text-slate-700">{activeWorkspace?.name || "current workspace"}</span>.
           </p>
         </div>
 
@@ -343,7 +339,7 @@ export default function HistoryDashboardPage() {
             <span>{blueprints.length} Total Generations</span>
           </div>
           <Link
-            href="/dashboard/1/modules"
+            href={`/dashboard/${activeWorkspace?.id || ''}/modules`}
             className="inline-flex items-center space-x-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
           >
             <Sparkles size={14} />

@@ -87,31 +87,36 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const initializeWorkspaces = useCallback(async () => {
-    setIsLoadingWorkspaces(true);
+    setIsLoadingWorkspaces(true); // Ensure it starts loading
+    
     try {
-      // 1. Ensure user is authenticated
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        setIsLoadingWorkspaces(false);
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        console.warn("No authenticated user found.");
+        setWorkspaces([]);
+        setActiveWorkspace(null);
         return;
       }
 
-      // 2. Fetch all workspaces for this user
       const { data, error } = await supabase
-        .from("workspaces")
-        .select("*")
-        .order("created_at", { ascending: true });
+        .from('workspaces')
+        .select('*')
+        .eq('owner_id', user.id)
+        .order('created_at', { ascending: true });
 
       if (error) {
-        console.warn("Supabase query workspaces error:", error);
+        console.error("Supabase Error fetching workspaces:", error.message);
+        // Don't throw, just fail gracefully so the user sees the 'Create Workspace' fallback
+        setWorkspaces([]); 
+        setActiveWorkspace(null);
+        return;
       }
 
-      let fetchedList: Workspace[] = (data as Workspace[]) || [];
+      let list: Workspace[] = (data as Workspace[]) || [];
 
       // Fallback check to FastAPI backend if direct Supabase client returns empty (e.g. RLS sync)
-      if (fetchedList.length === 0) {
+      if (list.length === 0) {
         try {
           const {
             data: { session },
@@ -123,7 +128,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             if (res.ok) {
               const backendWs = await res.json();
               if (backendWs && backendWs.length > 0) {
-                fetchedList = backendWs;
+                list = backendWs;
               }
             }
           }
@@ -132,34 +137,29 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      if (fetchedList && fetchedList.length > 0) {
-        setWorkspaces(fetchedList);
+      setWorkspaces(list);
 
-        // 3. Auto-select remembered workspace or first workspace if none is active
-        let targetWorkspace = fetchedList[0];
-
+      if (list.length > 0) {
+        let targetWorkspace = list[0];
         if (typeof window !== "undefined") {
           const savedId = localStorage.getItem("active_workspace_id");
           const urlMatch = window.location.pathname.match(/\/dashboard\/([0-9a-fA-F-]{36})/);
-          const currentUrlId = urlMatch ? urlMatch[1] : null;
-
-          const candidateId = currentUrlId || savedId;
+          const candidateId = (urlMatch ? urlMatch[1] : null) || savedId;
           if (candidateId) {
-            const match = fetchedList.find((w) => w.id === candidateId);
-            if (match) {
-              targetWorkspace = match;
-            }
+            const match = list.find((w) => w.id === candidateId);
+            if (match) targetWorkspace = match;
           }
         }
-
         setActiveWorkspace(targetWorkspace);
       } else {
-        setWorkspaces([]);
         setActiveWorkspace(null);
       }
     } catch (err) {
-      console.error("Failed to initialize workspaces:", err);
+      console.error("Unexpected JS Error in initializeWorkspaces:", err);
+      setWorkspaces([]);
+      setActiveWorkspace(null);
     } finally {
+      // CRITICAL FIX: This guarantees the loading spinner turns off no matter what happens
       setIsLoadingWorkspaces(false);
     }
   }, [setActiveWorkspace, setIsLoadingWorkspaces, setWorkspaces]);
@@ -171,11 +171,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_IN") {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
         initializeWorkspaces();
       } else if (event === "SIGNED_OUT") {
         setWorkspaces([]);
         setActiveWorkspace(null);
+        setIsLoadingWorkspaces(false);
         if (typeof window !== "undefined") {
           localStorage.removeItem("active_workspace_id");
         }
@@ -185,7 +186,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, [initializeWorkspaces, setActiveWorkspace, setWorkspaces]);
+  }, [initializeWorkspaces, setActiveWorkspace, setIsLoadingWorkspaces, setWorkspaces]);
 
   return (
     <WorkspaceContext.Provider

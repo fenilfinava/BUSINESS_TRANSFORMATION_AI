@@ -37,10 +37,13 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         print(f"Token validation failed: {str(e)}")
         raise HTTPException(status_code=401, detail=f"Supabase Auth Error: {str(e)}")
 
-def get_workspaces() -> List[Dict[str, Any]]:
+def get_workspaces(owner_id: Optional[str] = None) -> List[Dict[str, Any]]:
     client = get_supabase_client()
     try:
-        response = client.table("workspaces").select("*").order("created_at", desc=True).execute()
+        query = client.table("workspaces").select("*")
+        if owner_id:
+            query = query.eq("owner_id", owner_id)
+        response = query.order("created_at", desc=True).execute()
         return response.data or []
     except Exception as e:
         print(f"Error fetching workspaces from database: {e}")
@@ -164,10 +167,13 @@ async def get_blueprints(project_id: str, module_type: Optional[str] = None) -> 
         print(f"Error fetching blueprints: {e}")
         return []
 
-async def get_all_blueprints(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+async def get_all_blueprints(user_id: Optional[str] = None, workspace_id: Optional[str] = None) -> List[Dict[str, Any]]:
     client = get_supabase_client()
     try:
-        response = client.table("blueprints").select("*, projects(id, name)").order("created_at", desc=True).execute()
+        if workspace_id:
+            response = client.table("blueprints").select("*, projects!inner(id, name, workspace_id)").eq("projects.workspace_id", workspace_id).order("created_at", desc=True).execute()
+        else:
+            response = client.table("blueprints").select("*, projects(id, name)").order("created_at", desc=True).execute()
         return response.data or []
     except Exception as e:
         print(f"Error fetching all blueprints: {e}")

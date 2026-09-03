@@ -1,13 +1,13 @@
 from fastapi import APIRouter, HTTPException, Depends
-from typing import List
+from typing import List, Optional
 from models import WorkspaceResponse, WorkspaceStats, WorkspaceCreate, TeamMember
 from database import get_workspaces, get_workspace, create_workspace, get_workspace_stats, get_team_members, get_current_user
 
 router = APIRouter(prefix="/api/workspaces", tags=["Workspaces"])
 
 @router.get("", response_model=List[WorkspaceResponse])
-def list_workspaces():
-    return get_workspaces()
+def list_workspaces(user_id: Optional[str] = Depends(get_current_user)):
+    return get_workspaces(owner_id=user_id)
 
 @router.post("", response_model=WorkspaceResponse)
 def add_workspace(request: WorkspaceCreate, user_id: str = Depends(get_current_user)):

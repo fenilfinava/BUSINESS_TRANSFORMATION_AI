@@ -253,9 +253,12 @@ def normalize_blueprint(b: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @router.get("/blueprints")
-async def get_all_blueprints_endpoint(user_id: str = Depends(get_current_user)):
-    """Fetch all saved blueprints across projects."""
-    raw_blueprints = await get_all_blueprints(user_id)
+async def get_all_blueprints_endpoint(
+    workspace_id: Optional[str] = None,
+    user_id: str = Depends(get_current_user)
+):
+    """Fetch all saved blueprints across projects, optionally filtered by workspace."""
+    raw_blueprints = await get_all_blueprints(user_id, workspace_id=workspace_id)
     return [normalize_blueprint(b) for b in raw_blueprints]
 
 
