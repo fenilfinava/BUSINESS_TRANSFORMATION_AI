@@ -7,6 +7,7 @@ import { use, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { TeamInvitations } from "@/components/TeamInvitations";
 import { useWorkspace } from "@/context/WorkspaceContext";
+import { sanitizeError } from "@/utils/errorHandler";
 
 export default function WorkspaceDashboard(
   props: { params: Promise<{ workspaceId: string }> }
@@ -76,6 +77,7 @@ export default function WorkspaceDashboard(
         setProjects(loadedProjects);
       } catch (err: any) {
         console.error("UNCAUGHT FETCH EXCEPTION:", err);
+        setErrorMessage(sanitizeError(err, "Failed to load projects."));
       } finally {
         setLoading(false);
       }
@@ -191,7 +193,7 @@ export default function WorkspaceDashboard(
             </div>
           ) : (
             recentProjects.map((project) => (
-              <Link href={`/dashboard/projects/${project.id}`} key={project.id} passHref>
+              <Link href={`/dashboard/${targetWorkspaceId}/projects/${project.id}`} key={project.id} passHref>
                 <motion.div 
                   whileHover={{ backgroundColor: "rgba(248, 250, 252, 1)", x: 4 }}
                   whileTap={{ scale: 0.99 }}

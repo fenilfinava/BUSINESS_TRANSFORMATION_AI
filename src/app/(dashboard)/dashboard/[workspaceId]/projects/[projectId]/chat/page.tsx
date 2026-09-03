@@ -40,70 +40,147 @@ export default function ChatPage() {
     }
   }, [messages]);
 
+  // Helper function to pause execution and respect rate limits
+  const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
   const handleGenerate = async (prompt?: string) => {
     const textToSend = prompt || input;
-    if (!textToSend.trim()) return;
-    
+    if (!textToSend.trim() || isGenerating) return;
+
     if (!prompt) {
       setMessages(prev => [...prev, { role: "user", text: textToSend }]);
       setInput("");
+    } else {
+      setMessages(prev => [...prev, { role: "user", text: `Action requested: ${prompt}` }]);
     }
-    
-    setIsGenerating(true);
-    
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      const response = await fetch("http://localhost:8000/api/generate", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": session ? `Bearer ${session.access_token}` : ''
-        },
-        body: JSON.stringify({
-          workspace_id: workspaceId,
-          project_id: projectId,
-          prompt: textToSend,
-          uploaded_documents: [],
-          language: "en"
-        })
-      });
 
-      if (!response.body) throw new Error("No response body");
-      
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
-        
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const dataStr = line.slice(6).trim();
-            if (dataStr) {
-              try {
-                const data = JSON.parse(dataStr);
-                let messageText = "";
-                if (data.message) {
-                   messageText = data.message;
-                } else {
-                   messageText = `Module ${data.module} finished. Check the ${data.target_tab} tab.`;
-                }
-                setMessages(prev => [...prev, { role: "ai", text: messageText }]);
-              } catch (e) {
-                console.error("Error parsing JSON chunk:", dataStr, e);
-              }
-            }
+    setIsGenerating(true);
+
+    // Multi-module generation triggers (Generate HLD or Find Gaps)
+    const isMultiModule = textToSend === "Generate HLD" || textToSend === "Find Gaps";
+
+    if (isMultiModule) {
+      const modules = textToSend === "Generate HLD"
+        ? [
+            { name: "Solution Architecture Builder", slug: "solution_architecture", title: "Target Cloud & Architecture Specification" },
+            { name: "Database & Integration Designer", slug: "database_designer", title: "Enterprise Database & API Schema" },
+            { name: "Transformation Planner", slug: "transformation_planner", title: "Implementation Roadmap & Milestones" }
+          ]
+        : [
+            { name: "Business Analysis Engine", slug: "business_analysis", title: "Gap Analysis & Digital Maturity Assessment" },
+            { name: "AI Solution Builder", slug: "solution_builder", title: "AI & Automation Opportunity Strategy" },
+            { name: "Security & Compliance Guardian", slug: "security_compliance", title: "Security, Governance & Compliance Review" }
+          ];
+
+      const successfulGenerations: { module: string; slug: string; title: string; content: string }[] = [];
+
+      for (const mod of modules) {
+        try {
+          // 1. Update UI to show current module is processing
+          setMessages(prev => [...prev, { role: "system", text: `Querying LLM for ${mod.name}...` }]);
+
+          // 2. Fetch from Next.js backend API (Gemini 3.6 Flash)
+          const response = await fetch("/api/ai/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              projectId,
+              prompt: `Act as ${mod.name}. Formulate a comprehensive, actionable ${mod.title} for this project. Focus on enterprise standards, high depth, and concrete implementation specifications.`
+            }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.error || `Failed on ${mod.name}`);
           }
+
+          if (!data.text) {
+            throw new Error(`Empty response received for ${mod.name}`);
+          }
+
+          // 3. Save the ACTUAL content immediately
+          const generatedContent = data.text;
+          successfulGenerations.push({
+            module: mod.name,
+            slug: mod.slug,
+            title: mod.title,
+            content: generatedContent
+          });
+
+          // Append to chat stream
+          setMessages(prev => [
+            ...prev,
+            {
+              role: "ai",
+              text: `### 🎯 ${mod.name}\n**${mod.title}**\n\n${generatedContent}`
+            }
+          ]);
+
+          setMessages(prev => [...prev, { role: "system", text: `Module ${mod.name} finished. Check the chat tab.` }]);
+
+          // 4. Wait 1 second before querying next module to avoid HTTP 429 Too Many Requests
+          await delay(1000);
+
+        } catch (err: any) {
+          console.error(`Error generating ${mod.name}:`, err);
+          setMessages(prev => [...prev, { role: "system", text: `Error in ${mod.name}: ${err.message}` }]);
+          break;
         }
       }
-    } catch (err) {
-      console.error(err);
-      setMessages(prev => [...prev, { role: "ai", text: "Sorry, an error occurred during generation." }]);
+
+      // PHASE 2: SAVE TO HISTORY ONLY AFTER SUCCESSFUL RESOLUTION
+      if (successfulGenerations.length > 0) {
+        for (const gen of successfulGenerations) {
+          try {
+            await fetch("/api/ai/save-blueprint", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                projectId,
+                moduleType: gen.slug,
+                title: gen.title,
+                summary: gen.content.slice(0, 240) + "...",
+                content: gen.content,
+                key_recommendations: []
+              })
+            });
+          } catch (saveErr) {
+            console.warn(`Could not save ${gen.module} to database:`, saveErr);
+          }
+        }
+        setMessages(prev => [...prev, { role: "system", text: `All ${successfulGenerations.length} blueprints successfully saved to History & Solutions!` }]);
+      }
+
+      setIsGenerating(false);
+      return;
+    }
+
+    // Standard conversation handling
+    try {
+      const response = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          message: textToSend,
+          history: messages.filter(m => m.role === "user" || m.role === "ai").slice(-6)
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Chat request failed");
+      }
+
+      if (data.text) {
+        setMessages(prev => [...prev, { role: "ai", text: data.text }]);
+      } else {
+        throw new Error("No response returned from AI.");
+      }
+    } catch (err: any) {
+      console.error("Chat error:", err);
+      setMessages(prev => [...prev, { role: "ai", text: `⚠️ Error: ${err.message || "Failed to generate response."}` }]);
     } finally {
       setIsGenerating(false);
     }
@@ -142,29 +219,38 @@ export default function ChatPage() {
             key={i}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.15 }}
-            className={`flex space-x-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
+            transition={{ delay: i * 0.05 }}
+            className={msg.role === 'system' ? 'w-full flex justify-center my-1' : `flex space-x-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
           >
-            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${
-              msg.role === 'ai' 
-                ? 'bg-blue-100' 
-                : 'bg-gradient-to-br from-slate-700 to-slate-900'
-            } ${msg.role === 'user' ? 'ml-4' : ''}`}>
-              {msg.role === 'ai' 
-                ? <Bot size={18} className="text-blue-600" /> 
-                : <User size={18} className="text-white" />
-              }
-            </div>
-            <div className={msg.role === 'user' ? 'text-right' : ''}>
-              <p className="text-xs font-bold text-slate-500 mb-1.5">{msg.role === 'ai' ? 'AI Assistant' : 'You'}</p>
-              <div className={`text-sm p-4 rounded-2xl leading-relaxed ${
-                msg.role === 'ai' 
-                  ? 'text-slate-700 bg-slate-50 border border-slate-100' 
-                  : 'text-white bg-gradient-to-r from-blue-600 to-indigo-600 inline-block text-left shadow-lg shadow-blue-500/20'
-              }`}>
-                {msg.text}
-              </div>
-            </div>
+            {msg.role === 'system' ? (
+              <span className="text-xs font-semibold px-3.5 py-1.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                <span>{msg.text}</span>
+              </span>
+            ) : (
+              <>
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+                  msg.role === 'ai' 
+                    ? 'bg-blue-100' 
+                    : 'bg-gradient-to-br from-slate-700 to-slate-900'
+                } ${msg.role === 'user' ? 'ml-4' : ''}`}>
+                  {msg.role === 'ai' 
+                    ? <Bot size={18} className="text-blue-600" /> 
+                    : <User size={18} className="text-white" />
+                  }
+                </div>
+                <div className={msg.role === 'user' ? 'text-right' : ''}>
+                  <p className="text-xs font-bold text-slate-500 mb-1.5">{msg.role === 'ai' ? 'AI Assistant' : 'You'}</p>
+                  <div className={`text-sm p-4 rounded-2xl leading-relaxed whitespace-pre-wrap ${
+                    msg.role === 'ai' 
+                      ? 'text-slate-700 bg-slate-50 border border-slate-100' 
+                      : 'text-white bg-gradient-to-r from-blue-600 to-indigo-600 inline-block text-left shadow-lg shadow-blue-500/20'
+                  }`}>
+                    {msg.text}
+                  </div>
+                </div>
+              </>
+            )}
           </motion.div>
         ))}
       </div>

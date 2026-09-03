@@ -295,3 +295,124 @@ async def get_latest_blueprint(
         raise HTTPException(status_code=404, detail="No blueprint found for this module.")
     return normalize_blueprint(raw_blueprints[0])
 
+
+class AIRefineRequest(BaseModel):
+    project_id: str
+    module_type: str
+    previous_content: str
+    refinement_prompt: str
+    business_context: Optional[str] = ""
+
+
+@router.post("/refine", response_model=AIGenerateResponse)
+async def refine_ai_content(request: AIRefineRequest, user_id: str = Depends(get_current_user)):
+    """
+    Continuous Optimization endpoint (Step 7 from Blueprint).
+    Takes existing blueprint content + user feedback/steering prompt and produces an enhanced version.
+    """
+    import uuid
+    try:
+        uuid.UUID(str(request.project_id))
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="Invalid project ID format. Must be a valid UUID.")
+
+    if not gemini_model:
+        raise HTTPException(status_code=503, detail=gemini_error or "Gemini AI is not configured.")
+
+    resolved_module = MODULE_ALIASES.get(request.module_type, request.module_type)
+    specialized_instructions = MODULE_INSTRUCTIONS.get(
+        resolved_module,
+        f"Generate a comprehensive, actionable blueprint for {resolved_module}."
+    )
+
+    prompt = f"""You are an enterprise AI transformation strategist performing continuous optimization on a blueprint.
+
+Module: '{resolved_module}'
+Specialized Scope: {specialized_instructions}
+
+CURRENT BLUEPRINT CONTENT:
+{request.previous_content[:4000]}
+
+USER OPTIMIZATION / REFINEMENT FEEDBACK:
+"{request.refinement_prompt}"
+
+Additional Business Context: {request.business_context}
+
+TASK:
+Produce an enhanced, updated version of this blueprint incorporating the user's specific feedback and recommendations.
+Output valid JSON containing:
+{{
+  "module_type": "{resolved_module}",
+  "title": "A descriptive, professional title reflecting this optimized version",
+  "summary": "Executive summary of changes and key enhancements (2-3 sentences)",
+  "content": "Full markdown-formatted optimized blueprint with updated technical specs, diagrams, and adjustments...",
+  "key_recommendations": ["Key Update 1", "Key Update 2", "Key Update 3", "Key Update 4"]
+}}
+"""
+
+    try:
+        print(f"🔄 Refining blueprint for module '{resolved_module}' with feedback: '{request.refinement_prompt[:60]}...'")
+        response = await gemini_model.generate_content_async(
+            prompt,
+            generation_config=genai.GenerationConfig(
+                response_mime_type="application/json",
+            )
+        )
+        generated_text = response.text
+    except Exception as e:
+        print(f"❌ Gemini Refinement error: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Gemini API error: {str(e)}")
+
+    try:
+        parsed_data = json.loads(generated_text)
+    except Exception:
+        import re
+        cleaned = re.sub(r"^```json\s*", "", generated_text.strip(), flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        try:
+            parsed_data = json.loads(cleaned)
+        except Exception:
+            parsed_data = {
+                "module_type": resolved_module,
+                "title": f"Optimized {resolved_module.replace('_', ' ').title()} Blueprint",
+                "summary": "Continuous optimization applied via user steering.",
+                "content": generated_text,
+                "key_recommendations": []
+            }
+
+    content_markdown = parsed_data.get("content", generated_text)
+    title = parsed_data.get("title", f"Optimized {resolved_module.replace('_', ' ').title()} Blueprint")
+    summary = parsed_data.get("summary", "")
+    key_recommendations = parsed_data.get("key_recommendations", [])
+    if not isinstance(key_recommendations, list):
+        key_recommendations = [str(key_recommendations)]
+
+    blueprint_payload = {
+        "format": "markdown",
+        "title": title,
+        "summary": summary,
+        "content": content_markdown,
+        "key_recommendations": key_recommendations,
+        "is_refined": True,
+        "refinement_prompt": request.refinement_prompt
+    }
+
+    try:
+        saved_record = await save_blueprint(request.project_id, resolved_module, blueprint_payload)
+        print(f"💾 Optimized blueprint saved with ID {saved_record.get('id')}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to persist optimized blueprint: {str(e)}")
+
+    return AIGenerateResponse(
+        id=saved_record.get("id"),
+        created_at=saved_record.get("created_at"),
+        module_type=resolved_module,
+        title=title,
+        summary=summary,
+        content=content_markdown,
+        key_recommendations=key_recommendations,
+        format="markdown",
+        generated_content=blueprint_payload
+    )
+
+

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle, Search, Save, AlertCircle } from "lucide-react";
+import { CheckCircle, Search, Save, AlertCircle, Sparkles, Loader2, ArrowRight } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 
 interface BusinessDiscoveryProps {
@@ -16,6 +16,10 @@ export function BusinessDiscovery({ projectId }: BusinessDiscoveryProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // AI Discovery Analysis State
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<any | null>(null);
 
   // Form State
   const [companyOverview, setCompanyOverview] = useState("");
@@ -73,6 +77,37 @@ export function BusinessDiscovery({ projectId }: BusinessDiscoveryProps) {
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 4000);
+
+      // Trigger Gemini AI Discovery Analysis
+      setIsAnalyzing(true);
+      try {
+        const aiRes = await fetch("/api/ai/discovery", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId,
+            companyOverview,
+            targetAudience,
+            painPoints,
+            currentTech,
+            legacySystems,
+            kpis,
+            timeline,
+            budget
+          })
+        });
+
+        if (aiRes.ok) {
+          const aiData = await aiRes.json();
+          if (aiData.analysis) {
+            setAiAnalysis(aiData.analysis);
+          }
+        }
+      } catch (aiErr) {
+        console.warn("AI Discovery generation error:", aiErr);
+      } finally {
+        setIsAnalyzing(false);
+      }
     } catch (err: any) {
       console.error("Failed to save discovery context:", err);
       setErrorMessage(err.message || "Failed to save discovery context.");
@@ -295,6 +330,101 @@ export function BusinessDiscovery({ projectId }: BusinessDiscoveryProps) {
           </motion.button>
         </div>
       </div>
+
+      {/* AI Discovery Analysis Section */}
+      {isAnalyzing && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl flex items-center space-x-4 shadow-sm"
+        >
+          <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
+            <Loader2 size={20} className="animate-spin" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-blue-900">Formulating AI Strategic Analysis...</h4>
+            <p className="text-xs text-blue-700 mt-0.5">
+              Gemini is identifying digital maturity gaps, automation opportunities, and target architectures from your discovery session.
+            </p>
+          </div>
+        </motion.div>
+      )}
+
+      {aiAnalysis && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-8 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl shadow-2xl border border-indigo-800/50 space-y-6"
+        >
+          <div className="flex items-center space-x-3 pb-4 border-b border-white/10">
+            <div className="bg-indigo-500/20 text-indigo-300 p-2.5 rounded-xl border border-indigo-400/30">
+              <Sparkles size={22} className="animate-pulse" />
+            </div>
+            <div>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-indigo-400 font-bold">
+                Step 2 &bull; AI Opportunity Discovery
+              </span>
+              <h3 className="text-xl font-black text-white tracking-tight mt-0.5">
+                Strategic Discovery Analysis
+              </h3>
+            </div>
+          </div>
+
+          {aiAnalysis.summary && (
+            <div className="p-4 bg-white/5 rounded-2xl border border-white/10 text-sm text-slate-200 leading-relaxed">
+              <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider block mb-1">
+                Executive Synthesis
+              </span>
+              {aiAnalysis.summary}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {aiAnalysis.gap_analysis && aiAnalysis.gap_analysis.length > 0 && (
+              <div className="space-y-2.5">
+                <span className="text-xs font-bold text-rose-300 uppercase tracking-wider flex items-center space-x-1.5">
+                  <AlertCircle size={14} />
+                  <span>Identified Gaps & Constraints</span>
+                </span>
+                <div className="space-y-2">
+                  {aiAnalysis.gap_analysis.map((gap: string, i: number) => (
+                    <div key={i} className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-100 flex items-start space-x-2">
+                      <span className="text-rose-400 font-bold">•</span>
+                      <span>{gap}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {aiAnalysis.ai_opportunities && aiAnalysis.ai_opportunities.length > 0 && (
+              <div className="space-y-2.5">
+                <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider flex items-center space-x-1.5">
+                  <CheckCircle size={14} />
+                  <span>High-Impact AI & Automation Initiatives</span>
+                </span>
+                <div className="space-y-2">
+                  {aiAnalysis.ai_opportunities.map((opp: string, i: number) => (
+                    <div key={i} className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-100 flex items-start space-x-2">
+                      <span className="text-emerald-400 font-bold">&check;</span>
+                      <span>{opp}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {aiAnalysis.recommended_architecture && (
+            <div className="p-4 bg-white/5 rounded-2xl border border-white/10 text-xs text-slate-300 space-y-1.5">
+              <span className="text-[10px] font-bold text-blue-300 uppercase tracking-wider block">
+                Target Architecture Recommendation
+              </span>
+              <p className="leading-relaxed">{aiAnalysis.recommended_architecture}</p>
+            </div>
+          )}
+        </motion.div>
+      )}
     </div>
   );
 }

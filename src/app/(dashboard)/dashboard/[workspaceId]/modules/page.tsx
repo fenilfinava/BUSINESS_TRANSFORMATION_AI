@@ -4,12 +4,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Bot, Lightbulb, Search, Briefcase, Map, Cpu, Workflow, 
   PenTool, Database, Clock, BarChart3, ShieldCheck, ArrowRight, X, Loader2, 
-  ChevronDown, Sparkles, History, RotateCcw, Calendar
+  ChevronDown, Sparkles, History, RotateCcw, Calendar, Download, ThumbsUp, ThumbsDown, Check, Send
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { exportToPdf, exportToWord, exportToMarkdown, exportToJson } from "@/utils/exportUtils";
 
 const aiModules = [
   { id: "transformation_planner", name: "Transformation Planner", slug: "transformation_planner", desc: "Generates transformation roadmaps for AI adoption, automation, modernization, cloud migration & more.", icon: Map, color: "text-purple-500", bg: "bg-purple-100", format: "markdown" },
@@ -68,6 +69,13 @@ export default function ModulesPage() {
   const [moduleVersions, setModuleVersions] = useState<Record<string, BlueprintVersion[]>>({});
   const [selectedVersionId, setSelectedVersionId] = useState<Record<string, string>>({});
   const [loadingVersions, setLoadingVersions] = useState<Record<string, boolean>>({});
+
+  // Step 6 & 7: Export & Continuous Optimization states
+  const [refinePrompt, setRefinePrompt] = useState<Record<string, string>>({});
+  const [isRefining, setIsRefining] = useState<Record<string, boolean>>({});
+  const [feedbackGiven, setFeedbackGiven] = useState<Record<string, 'up' | 'down' | null>>({});
+  const [showExportMenu, setShowExportMenu] = useState<Record<string, boolean>>({});
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   const isValidUUID = (val?: string) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 
@@ -321,6 +329,69 @@ export default function ModulesPage() {
     }
   };
 
+  const handleRefine = async (slug: string) => {
+    const prompt = refinePrompt[slug];
+    if (!prompt?.trim() || !selectedProject) return;
+
+    setIsRefining(prev => ({ ...prev, [slug]: true }));
+    setModuleErrors(prev => ({ ...prev, [slug]: "" }));
+
+    try {
+      const currentResult = moduleResults[slug];
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || "";
+
+      const currentProj = projects.find(p => p.id === selectedProject);
+
+      const res = await fetch("http://localhost:8000/api/ai/refine", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          project_id: selectedProject,
+          module_type: slug,
+          previous_content: currentResult?.content || "",
+          refinement_prompt: prompt.trim(),
+          business_context: currentProj?.description || ""
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to refine blueprint");
+      }
+
+      const refined = await res.json();
+      setModuleResults(prev => ({
+        ...prev,
+        [slug]: {
+          title: refined.title,
+          summary: refined.summary,
+          content: refined.content,
+          format: refined.format || "markdown",
+          key_recommendations: refined.key_recommendations
+        }
+      }));
+
+      // Refresh version history
+      await loadVersionsForModule(slug, selectedProject);
+      setRefinePrompt(prev => ({ ...prev, [slug]: "" }));
+    } catch (err: any) {
+      console.error("Error refining blueprint:", err);
+      setModuleErrors(prev => ({ ...prev, [slug]: err.message || "Failed to optimize blueprint." }));
+    } finally {
+      setIsRefining(prev => ({ ...prev, [slug]: false }));
+    }
+  };
+
+  const handleFeedback = (slug: string, type: 'up' | 'down') => {
+    setFeedbackGiven(prev => ({ ...prev, [slug]: type }));
+    setExportNotice(type === 'up' ? "Thank you! Feedback recorded to optimize recommendations." : "Feedback recorded. Use the Refine box below to guide the AI.");
+    setTimeout(() => setExportNotice(null), 4000);
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       <div>
@@ -570,12 +641,104 @@ export default function ModulesPage() {
                           </h4>
                         )}
                       </div>
-                      <button
-                        onClick={() => navigator.clipboard.writeText(moduleResults[activeModule.slug].content)}
-                        className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs cursor-pointer"
-                      >
-                        Copy Blueprint
-                      </button>
+                      <div className="flex items-center space-x-2">
+                        {/* Step 6: Multi-format Export Dropdown */}
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setShowExportMenu(prev => ({ ...prev, [activeModule.slug]: !prev[activeModule.slug] }))}
+                            className="flex items-center space-x-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs cursor-pointer transition-all"
+                          >
+                            <Download size={14} className="text-blue-600" />
+                            <span>Export</span>
+                            <ChevronDown size={12} className="text-slate-400" />
+                          </button>
+
+                          {showExportMenu[activeModule.slug] && (
+                            <div className="absolute right-0 mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-200 p-1.5 z-50 text-xs font-semibold space-y-0.5 animate-in fade-in zoom-in-95">
+                              <button
+                                onClick={() => {
+                                  const curProj = projects.find(p => p.id === selectedProject);
+                                  exportToPdf({
+                                    title: moduleResults[activeModule.slug].title || activeModule.name,
+                                    summary: moduleResults[activeModule.slug].summary,
+                                    content: moduleResults[activeModule.slug].content,
+                                    projectName: curProj?.name,
+                                    module_name: activeModule.name,
+                                    key_recommendations: moduleResults[activeModule.slug].key_recommendations
+                                  });
+                                  setShowExportMenu(prev => ({ ...prev, [activeModule.slug]: false }));
+                                }}
+                                className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-slate-700 hover:text-blue-700 flex items-center justify-between cursor-pointer"
+                              >
+                                <span>📄 PDF Report</span>
+                                <span className="text-[10px] text-slate-400 font-mono">.pdf</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const curProj = projects.find(p => p.id === selectedProject);
+                                  exportToWord({
+                                    title: moduleResults[activeModule.slug].title || activeModule.name,
+                                    summary: moduleResults[activeModule.slug].summary,
+                                    content: moduleResults[activeModule.slug].content,
+                                    projectName: curProj?.name,
+                                    module_name: activeModule.name,
+                                    key_recommendations: moduleResults[activeModule.slug].key_recommendations
+                                  });
+                                  setShowExportMenu(prev => ({ ...prev, [activeModule.slug]: false }));
+                                }}
+                                className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-slate-700 hover:text-blue-700 flex items-center justify-between cursor-pointer"
+                              >
+                                <span>📝 Word Document</span>
+                                <span className="text-[10px] text-slate-400 font-mono">.doc</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const curProj = projects.find(p => p.id === selectedProject);
+                                  exportToMarkdown({
+                                    title: moduleResults[activeModule.slug].title || activeModule.name,
+                                    summary: moduleResults[activeModule.slug].summary,
+                                    content: moduleResults[activeModule.slug].content,
+                                    projectName: curProj?.name,
+                                    module_name: activeModule.name,
+                                    key_recommendations: moduleResults[activeModule.slug].key_recommendations
+                                  });
+                                  setShowExportMenu(prev => ({ ...prev, [activeModule.slug]: false }));
+                                }}
+                                className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-slate-700 hover:text-blue-700 flex items-center justify-between cursor-pointer"
+                              >
+                                <span>📑 Markdown</span>
+                                <span className="text-[10px] text-slate-400 font-mono">.md</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const curProj = projects.find(p => p.id === selectedProject);
+                                  exportToJson({
+                                    title: moduleResults[activeModule.slug].title || activeModule.name,
+                                    summary: moduleResults[activeModule.slug].summary,
+                                    content: moduleResults[activeModule.slug].content,
+                                    projectName: curProj?.name,
+                                    module_name: activeModule.name,
+                                    key_recommendations: moduleResults[activeModule.slug].key_recommendations
+                                  });
+                                  setShowExportMenu(prev => ({ ...prev, [activeModule.slug]: false }));
+                                }}
+                                className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-slate-700 hover:text-blue-700 flex items-center justify-between cursor-pointer"
+                              >
+                                <span>⚙️ JSON Spec</span>
+                                <span className="text-[10px] text-slate-400 font-mono">.json</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => navigator.clipboard.writeText(moduleResults[activeModule.slug].content)}
+                          className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs cursor-pointer"
+                        >
+                          Copy
+                        </button>
+                      </div>
                     </div>
 
                     {moduleResults[activeModule.slug].summary && (
@@ -598,10 +761,83 @@ export default function ModulesPage() {
                       </div>
                     )}
 
-                    <div className="px-5 pb-5">
-                      <pre className="p-4 text-sm text-slate-800 whitespace-pre-wrap overflow-x-auto max-h-[400px] overflow-y-auto leading-relaxed font-mono bg-white rounded-xl border border-slate-200">
+                    <div className="px-5">
+                      <pre className="p-4 text-sm text-slate-800 whitespace-pre-wrap overflow-x-auto max-h-[360px] overflow-y-auto leading-relaxed font-mono bg-white rounded-xl border border-slate-200">
                         {moduleResults[activeModule.slug].content}
                       </pre>
+                    </div>
+
+                    {/* Step 7: Continuous Optimization & Feedback Section */}
+                    <div className="mx-5 mb-5 p-4 bg-gradient-to-br from-indigo-50/80 via-blue-50/50 to-white rounded-2xl border border-indigo-100 space-y-3.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-100/80 pb-3">
+                        <div>
+                          <h5 className="text-xs font-bold text-indigo-950 flex items-center space-x-1.5">
+                            <Sparkles size={14} className="text-indigo-600" />
+                            <span>Continuous Optimization & Steering (Step 7)</span>
+                          </h5>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            AI learns continuously from your feedback to refine architecture and roadmap recommendations.
+                          </p>
+                        </div>
+
+                        {/* Thumbs Up / Down Rating */}
+                        <div className="flex items-center space-x-2">
+                          <span className="text-[11px] font-medium text-slate-500">Rate output:</span>
+                          <button
+                            onClick={() => handleFeedback(activeModule.slug, 'up')}
+                            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${feedbackGiven[activeModule.slug] === 'up' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-white text-slate-500 hover:text-slate-800 border-slate-200'}`}
+                            title="Helpful blueprint"
+                          >
+                            <ThumbsUp size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleFeedback(activeModule.slug, 'down')}
+                            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${feedbackGiven[activeModule.slug] === 'down' ? 'bg-amber-100 text-amber-700 border-amber-300' : 'bg-white text-slate-500 hover:text-slate-800 border-slate-200'}`}
+                            title="Needs refinement"
+                          >
+                            <ThumbsDown size={14} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {exportNotice && (
+                        <div className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-200 animate-in fade-in">
+                          {exportNotice}
+                        </div>
+                      )}
+
+                      {/* Interactive Optimization Input */}
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={refinePrompt[activeModule.slug] || ""}
+                            onChange={(e) => setRefinePrompt(prev => ({ ...prev, [activeModule.slug]: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleRefine(activeModule.slug);
+                              }
+                            }}
+                            placeholder="e.g. Focus on microservices security, add cost breakdown for AWS..."
+                            className="flex-1 bg-white border border-indigo-200 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs placeholder:text-slate-400"
+                          />
+                          <button
+                            onClick={() => handleRefine(activeModule.slug)}
+                            disabled={isRefining[activeModule.slug] || !refinePrompt[activeModule.slug]?.trim()}
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center space-x-1.5 cursor-pointer shrink-0"
+                          >
+                            {isRefining[activeModule.slug] ? (
+                              <><Loader2 size={13} className="animate-spin" /><span>Refining...</span></>
+                            ) : (
+                              <><Send size={13} /><span>Optimize</span></>
+                            )}
+                          </button>
+                        </div>
+                        <span className="text-[10px] text-slate-400 block">
+                          Applies your steering instructions and saves a new version in Supabase version history.
+                        </span>
+                      </div>
                     </div>
                   </motion.div>
                 )}

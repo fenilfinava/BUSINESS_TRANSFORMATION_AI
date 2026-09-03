@@ -29,20 +29,35 @@ export default function ProjectOverview() {
           .eq('id', projectId)
           .single();
 
-        if (error) {
-          console.error("Error fetching project:", error);
+        let loadedProject = null;
+        if (!error && data) {
+          loadedProject = data;
         } else {
-          setProject(data);
-
-          // 2. Fetch real blueprint count for this project
-          const { data: blueprints, error: bpError } = await supabase
-            .from('blueprints')
-            .select('id')
-            .eq('project_id', projectId);
-
-          if (!bpError && blueprints) {
-            setBlueprintsCount(blueprints.length);
+          console.warn("Direct Supabase project fetch error, trying backend fallback:", error?.message);
+          const { data: { session } } = await supabase.auth.getSession();
+          const res = await fetch(`http://localhost:8000/api/projects/${projectId}`, {
+            headers: {
+              Authorization: session ? `Bearer ${session.access_token}` : ''
+            }
+          });
+          if (res.ok) {
+            const backendProj = await res.json();
+            if (backendProj && backendProj.id) {
+              loadedProject = backendProj;
+            }
           }
+        }
+
+        setProject(loadedProject);
+
+        // 2. Fetch real blueprint count for this project
+        const { data: blueprints, error: bpError } = await supabase
+          .from('blueprints')
+          .select('id')
+          .eq('project_id', projectId);
+
+        if (!bpError && blueprints) {
+          setBlueprintsCount(blueprints.length);
         }
       } catch (err) {
         console.error("Unexpected error fetching project:", err);

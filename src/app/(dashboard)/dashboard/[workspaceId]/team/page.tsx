@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useWorkspace } from "@/context/WorkspaceContext";
+import { sanitizeError } from "@/utils/errorHandler";
 
 export default function TeamPage() {
   const params = useParams();
@@ -164,7 +165,7 @@ export default function TeamPage() {
       const result = await res.json();
 
       if (!res.ok) {
-        throw new Error(result.error || "Failed to send invitation.");
+        throw new Error(sanitizeError(result.error, "Failed to send invitation."));
       }
 
       setInviteSuccess(`Invitation successfully sent to ${inviteEmail}!`);
@@ -180,7 +181,7 @@ export default function TeamPage() {
       fetchTeamAndProjects();
     } catch (err: any) {
       console.error("Invite error:", err);
-      setInviteError(err.message || "Failed to invite member.");
+      setInviteError(sanitizeError(err, "Failed to invite member."));
     } finally {
       setIsInviting(false);
     }
@@ -203,13 +204,13 @@ export default function TeamPage() {
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to remove member.");
+        throw new Error(sanitizeError(errorData.error, "Failed to remove member."));
       }
 
       setTeamMembers((prev) => prev.filter((m) => m.id !== memberId));
     } catch (err: any) {
       console.error("Error removing member:", err);
-      alert(err.message || "Failed to remove member.");
+      alert(sanitizeError(err, "Failed to remove member."));
     } finally {
       setDeletingId(null);
     }

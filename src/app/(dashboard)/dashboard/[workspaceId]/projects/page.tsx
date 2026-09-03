@@ -8,6 +8,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useWorkspace } from "@/context/WorkspaceContext";
 import { deleteProjectAction } from "@/app/actions/deleteProject";
+import { sanitizeError } from "@/utils/errorHandler";
 
 export default function ProjectsListPage() {
   const params = useParams();
@@ -50,7 +51,7 @@ export default function ProjectsListPage() {
         } else {
           if (error) {
             console.error("Project fetch error:", error.message);
-            setErrorMessage(error.message);
+            setErrorMessage(sanitizeError(error.message, "Unable to load projects."));
           }
           // Secondary fallback: fetch projects via backend API to bypass any database recursion errors
           if (workspaceId) {
@@ -77,6 +78,7 @@ export default function ProjectsListPage() {
         setAllProjects(loadedProjects);
       } catch (err: any) {
         console.error("UNCAUGHT FETCH EXCEPTION:", err);
+        setErrorMessage(sanitizeError(err, "Failed to load projects."));
       } finally {
         setIsLoading(false);
       }
@@ -118,7 +120,7 @@ export default function ProjectsListPage() {
       setDeletingProject(null);
     } catch (err: any) {
       console.error("Deletion failed:", err);
-      setDeleteError(err.message || "Failed to delete project.");
+      setDeleteError(sanitizeError(err, "Failed to delete project."));
     } finally {
       setIsDeleting(false);
     }

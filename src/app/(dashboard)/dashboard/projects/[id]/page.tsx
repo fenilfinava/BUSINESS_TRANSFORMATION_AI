@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AlertCircle, ArrowLeft, Layers, MessageSquare, Search, FileText, Trash2 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { deleteProjectAction } from "@/app/actions/deleteProject";
+import { sanitizeError } from "@/utils/errorHandler";
 import { ProjectOverview } from "@/components/features/projects/ProjectOverview";
 import { BusinessDiscovery } from "@/components/features/projects/BusinessDiscovery";
 import { AiChatInterface } from "@/components/features/projects/AiChatInterface";
@@ -60,7 +61,7 @@ export default function ProjectDetailsPage() {
       }
     } catch (err: any) {
       console.error("Error deleting project:", err);
-      setDeleteError(err.message || "Failed to delete project.");
+      setDeleteError(sanitizeError(err, "Failed to delete project."));
       setIsDeleting(false);
     }
   };
@@ -72,6 +73,7 @@ export default function ProjectDetailsPage() {
       const supabase = createClient();
 
       try {
+        let loadedProject: any = null;
         // 1. Fetch real project details
         const { data, error } = await supabase
           .from("projects")
@@ -79,12 +81,30 @@ export default function ProjectDetailsPage() {
           .eq("id", projectId)
           .single();
 
-        if (error) {
-          console.error("Error fetching project:", error);
-          setProject(null);
+        if (!error && data) {
+          loadedProject = data;
         } else {
-          setProject(data);
+          console.warn("Direct Supabase project fetch error, trying backend fallback:", error?.message);
+          const { data: { session } } = await supabase.auth.getSession();
+          const res = await fetch(`http://localhost:8000/api/projects/${projectId}`, {
+            headers: {
+              Authorization: session ? `Bearer ${session.access_token}` : ''
+            }
+          });
+          if (res.ok) {
+            const backendProj = await res.json();
+            if (backendProj && backendProj.id) {
+              loadedProject = backendProj;
+            }
+          }
         }
+
+        if (loadedProject && loadedProject.workspace_id) {
+          router.replace(`/dashboard/${loadedProject.workspace_id}/projects/${loadedProject.id}`);
+          return;
+        }
+
+        setProject(loadedProject);
       } catch (err) {
         console.error("Unexpected error fetching project:", err);
         setProject(null);

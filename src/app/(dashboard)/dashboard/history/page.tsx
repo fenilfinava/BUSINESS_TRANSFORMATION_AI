@@ -26,12 +26,13 @@ import {
   TrendingUp,
   FolderGit2,
   Code2,
-  FileText,
-  ArrowRight
+  ArrowRight,
+  ChevronDown
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useWorkspace } from "@/context/WorkspaceContext";
+import { exportToPdf, exportToWord, exportToMarkdown, exportToJson } from "@/utils/exportUtils";
 
 interface BlueprintItem {
   id: string;
@@ -154,6 +155,7 @@ export default function HistoryDashboardPage() {
   const [activeItem, setActiveItem] = useState<BlueprintItem | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedContent, setCopiedContent] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   // Fetch blueprints scoped to the activeWorkspace
   useEffect(() => {
@@ -624,13 +626,91 @@ export default function HistoryDashboardPage() {
                     <span>{copiedContent ? "Copied!" : "Export / Copy"}</span>
                   </button>
 
-                  <button
-                    onClick={() => handleDownloadMarkdown(activeItem)}
-                    className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer border border-slate-200 bg-white shadow-2xs"
-                    title="Download .md"
-                  >
-                    <Download size={16} />
-                  </button>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowExportMenu(prev => !prev)}
+                      className="flex items-center space-x-1 px-3 py-2 text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 rounded-xl transition-colors cursor-pointer border border-slate-200 shadow-2xs text-xs font-bold"
+                      title="Export Blueprint"
+                    >
+                      <Download size={15} className="text-blue-600" />
+                      <span>Export</span>
+                      <ChevronDown size={12} className="text-slate-400" />
+                    </button>
+
+                    {showExportMenu && (
+                      <div className="absolute right-0 mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-200 p-1.5 z-50 text-xs font-semibold space-y-0.5 animate-in fade-in zoom-in-95">
+                        <button
+                          onClick={() => {
+                            exportToPdf({
+                              title: activeItem.title,
+                              summary: activeItem.summary,
+                              content: activeItem.content,
+                              projectName: activeItem.projectName,
+                              module_name: activeItem.module_type,
+                              key_recommendations: activeItem.key_recommendations
+                            });
+                            setShowExportMenu(false);
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-slate-700 hover:text-blue-700 flex items-center justify-between cursor-pointer"
+                        >
+                          <span>📄 PDF Report</span>
+                          <span className="text-[10px] text-slate-400 font-mono">.pdf</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            exportToWord({
+                              title: activeItem.title,
+                              summary: activeItem.summary,
+                              content: activeItem.content,
+                              projectName: activeItem.projectName,
+                              module_name: activeItem.module_type,
+                              key_recommendations: activeItem.key_recommendations
+                            });
+                            setShowExportMenu(false);
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-slate-700 hover:text-blue-700 flex items-center justify-between cursor-pointer"
+                        >
+                          <span>📝 Word Document</span>
+                          <span className="text-[10px] text-slate-400 font-mono">.doc</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            exportToMarkdown({
+                              title: activeItem.title,
+                              summary: activeItem.summary,
+                              content: activeItem.content,
+                              projectName: activeItem.projectName,
+                              module_name: activeItem.module_type,
+                              key_recommendations: activeItem.key_recommendations
+                            });
+                            setShowExportMenu(false);
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-slate-700 hover:text-blue-700 flex items-center justify-between cursor-pointer"
+                        >
+                          <span>📑 Markdown</span>
+                          <span className="text-[10px] text-slate-400 font-mono">.md</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            exportToJson({
+                              title: activeItem.title,
+                              summary: activeItem.summary,
+                              content: activeItem.content,
+                              projectName: activeItem.projectName,
+                              module_name: activeItem.module_type,
+                              key_recommendations: activeItem.key_recommendations
+                            });
+                            setShowExportMenu(false);
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-slate-700 hover:text-blue-700 flex items-center justify-between cursor-pointer"
+                        >
+                          <span>⚙️ JSON Spec</span>
+                          <span className="text-[10px] text-slate-400 font-mono">.json</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   <button
                     onClick={() => setActiveItem(null)}

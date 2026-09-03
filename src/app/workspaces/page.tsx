@@ -8,6 +8,7 @@ import { AnimatedBackground } from '@/components/common/AnimatedBackground';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useWorkspace } from '@/context/WorkspaceContext';
+import { TeamInvitations } from '@/components/TeamInvitations';
 
 const COLOR_GRADIENTS = [
   "from-blue-500 to-indigo-600",
@@ -116,6 +117,8 @@ export default function WorkspacesPage() {
             Choose a workspace to continue or create a new one to start your transformation journey.
           </motion.p>
         </div>
+
+        <TeamInvitations />
         
         {isLoadingWorkspaces ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">

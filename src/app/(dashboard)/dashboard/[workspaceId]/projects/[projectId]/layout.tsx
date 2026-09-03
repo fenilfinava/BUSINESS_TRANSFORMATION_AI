@@ -1,18 +1,25 @@
 import { ReactNode } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 export default async function ProjectLayout(
   props: { children: ReactNode, params: Promise<{ workspaceId: string, projectId: string }> }
 ) {
   const params = await props.params;
 
-  // Fetch real project details from Supabase
-  const { data: project } = await supabase
-    .from('projects')
-    .select('*')
-    .eq('id', params.projectId)
-    .single();
+  // Fetch real project details from Supabase using admin client to bypass RLS recursion
+  let project: any = null;
+  try {
+    const adminSupabase = createAdminClient();
+    const { data } = await adminSupabase
+      .from('projects')
+      .select('*')
+      .eq('id', params.projectId)
+      .single();
+    project = data;
+  } catch (err) {
+    console.error("Error fetching project in ProjectLayout:", err);
+  }
 
   const projectName = project?.name || "Transformation Project";
   const projectStatus = project?.status || "In Progress";

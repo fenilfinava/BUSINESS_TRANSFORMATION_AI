@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Layers, Zap, Server, Shield, FileDown, Sparkles, Calendar, ChevronRight, X, ExternalLink } from "lucide-react";
+import { Layers, Zap, Server, Shield, FileDown, Sparkles, Calendar, ChevronRight, X, ExternalLink, Download, FileText } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
+import { exportToPdf, exportToWord, exportToMarkdown, exportToJson } from "@/utils/exportUtils";
 
 interface SolutionsGalleryProps {
   projectId: string;
@@ -250,17 +251,65 @@ export function SolutionsGallery({ projectId, onTabChange }: SolutionsGalleryPro
                 </div>
               </div>
 
-              <div className="p-4 px-6 border-t border-slate-100 bg-slate-50/50 flex justify-end space-x-3">
-                <button
-                  onClick={() => handleExportJson(selectedBlueprint)}
-                  className="px-4 py-2 border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-white transition-colors flex items-center space-x-2"
-                >
-                  <FileDown size={16} />
-                  <span>Download Blueprint</span>
-                </button>
+              <div className="p-4 px-6 border-t border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Export:</span>
+                  <button
+                    onClick={() => {
+                      const content = selectedBlueprint.generated_content || {};
+                      exportToPdf({
+                        title: content.title || selectedBlueprint.module_type || "Blueprint",
+                        summary: content.summary,
+                        content: typeof content.content === "string" ? content.content : JSON.stringify(content, null, 2),
+                        module_name: selectedBlueprint.module_type,
+                        key_recommendations: content.key_recommendations
+                      });
+                    }}
+                    className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300 rounded-lg text-xs font-bold transition shadow-xs flex items-center space-x-1 cursor-pointer"
+                  >
+                    <span>📄 PDF</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const content = selectedBlueprint.generated_content || {};
+                      exportToWord({
+                        title: content.title || selectedBlueprint.module_type || "Blueprint",
+                        summary: content.summary,
+                        content: typeof content.content === "string" ? content.content : JSON.stringify(content, null, 2),
+                        module_name: selectedBlueprint.module_type,
+                        key_recommendations: content.key_recommendations
+                      });
+                    }}
+                    className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300 rounded-lg text-xs font-bold transition shadow-xs flex items-center space-x-1 cursor-pointer"
+                  >
+                    <span>📝 Word</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const content = selectedBlueprint.generated_content || {};
+                      exportToMarkdown({
+                        title: content.title || selectedBlueprint.module_type || "Blueprint",
+                        summary: content.summary,
+                        content: typeof content.content === "string" ? content.content : JSON.stringify(content, null, 2),
+                        module_name: selectedBlueprint.module_type,
+                        key_recommendations: content.key_recommendations
+                      });
+                    }}
+                    className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300 rounded-lg text-xs font-bold transition shadow-xs flex items-center space-x-1 cursor-pointer"
+                  >
+                    <span>📑 MD</span>
+                  </button>
+                  <button
+                    onClick={() => handleExportJson(selectedBlueprint)}
+                    className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300 rounded-lg text-xs font-bold transition shadow-xs flex items-center space-x-1 cursor-pointer"
+                  >
+                    <span>⚙️ JSON</span>
+                  </button>
+                </div>
+
                 <button
                   onClick={() => setSelectedBlueprint(null)}
-                  className="px-5 py-2 bg-slate-800 text-white rounded-xl text-sm font-bold hover:bg-slate-700 transition-colors"
+                  className="px-5 py-2 bg-slate-800 text-white rounded-xl text-sm font-bold hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   Close
                 </button>
