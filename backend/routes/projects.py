@@ -12,9 +12,7 @@ async def list_projects(workspace_id: str, user_id: str = Depends(get_current_us
 
 @router.post("/api/projects", response_model=ProjectResponse)
 async def add_project(request: ProjectCreateRequest, user_id: str = Depends(get_current_user)):
-    # You might want to pass user_id down to create_project if you want to store who created it.
-    # For now, it simply enforces that the user is authenticated.
-    return await create_project(request.model_dump())
+    return await create_project(request.model_dump(), user_id=user_id)
 
 @router.get("/api/projects/{project_id}", response_model=ProjectResponse)
 async def get_project_detail(project_id: str, user_id: str = Depends(get_current_user)):

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, ArrowLeft, Layers, MessageSquare, Search, FileText } from "lucide-react";
+import { AlertCircle, ArrowLeft, Layers, MessageSquare, Search, FileText, Trash2 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { ProjectOverview } from "@/components/features/projects/ProjectOverview";
 import { BusinessDiscovery } from "@/components/features/projects/BusinessDiscovery";
@@ -20,6 +20,40 @@ export default function ProjectDetailsPage() {
   const [project, setProject] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteProject = async () => {
+    if (!project) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("projects")
+        .delete()
+        .eq("id", project.id)
+        .select();
+
+      if (error) throw new Error(error.message);
+
+      if (!data || data.length === 0) {
+        throw new Error("Permission denied: Database RLS policy prevented deleting this project.");
+      }
+
+      if (project.workspace_id) {
+        router.push(`/dashboard/${project.workspace_id}/projects`);
+      } else {
+        router.push("/dashboard");
+      }
+    } catch (err: any) {
+      console.error("Error deleting project:", err);
+      setDeleteError(err.message || "Failed to delete project.");
+      setIsDeleting(false);
+    }
+  };
 
   useEffect(() => {
     const fetchProject = async () => {
@@ -134,6 +168,16 @@ export default function ProjectDetailsPage() {
               </p>
             )}
           </div>
+
+          <div className="flex items-center">
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="flex items-center space-x-2 bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-500/30 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            >
+              <Trash2 size={16} />
+              <span>Delete Project</span>
+            </button>
+          </div>
         </div>
 
         {/* Tab Navigation Controls */}
@@ -174,6 +218,49 @@ export default function ProjectDetailsPage() {
           <SolutionsGallery projectId={project.id} onTabChange={(tab) => setActiveTab(tab as TabKey)} />
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-slate-200">
+            <h3 className="text-xl font-bold text-slate-900">Delete Project</h3>
+            <p className="text-slate-600 text-sm mt-2">
+              Are you sure you want to delete <strong>{project.name}</strong>? All associated blueprints and discovery data will be permanently removed.
+            </p>
+
+            {deleteError && (
+              <div className="mt-4 bg-red-50 text-red-600 text-sm p-3 rounded-xl border border-red-100 font-medium">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="mt-6 flex items-center justify-end space-x-3">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteError(null);
+                }}
+                className="px-4 py-2 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteProject}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-all shadow-md shadow-red-500/20 flex items-center cursor-pointer"
+              >
+                {isDeleting && (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                )}
+                {isDeleting ? "Deleting..." : "Delete Project"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

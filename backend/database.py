@@ -110,7 +110,7 @@ async def get_project(project_id: str) -> Dict[str, Any]:
         print(f"Error fetching project: {e}")
         return {}
 
-async def create_project(data: Dict[str, Any]) -> Dict[str, Any]:
+async def create_project(data: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
     client = get_supabase_client()
     try:
         ws_id = data.get("workspace_id")
@@ -120,8 +120,19 @@ async def create_project(data: Dict[str, Any]) -> Dict[str, Any]:
                 uuid.UUID(str(ws_id))
             except (ValueError, AttributeError):
                 raise HTTPException(status_code=400, detail="Invalid workspace ID format. Must be a valid UUID.")
-        response = client.table("projects").insert(data).execute()
-        return response.data[0] if response.data else {}
+        
+        if user_id:
+            data["user_id"] = user_id
+
+        try:
+            response = client.table("projects").insert(data).execute()
+            return response.data[0] if response.data else {}
+        except Exception as insert_err:
+            if "user_id" in str(insert_err):
+                data.pop("user_id", None)
+                response = client.table("projects").insert(data).execute()
+                return response.data[0] if response.data else {}
+            raise insert_err
     except HTTPException:
         raise
     except Exception as e:

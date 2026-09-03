@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { PlusCircle, Search } from "lucide-react";
+import { PlusCircle, Search, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -14,6 +14,36 @@ export default function ProjectsListPage() {
   const [allProjects, setAllProjects] = useState<any[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingProject, setDeletingProject] = useState<any | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteProject = async () => {
+    if (!deletingProject) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', deletingProject.id)
+        .select();
+
+      if (error) throw new Error(error.message);
+
+      if (!data || data.length === 0) {
+        throw new Error("Permission denied: Database RLS policy prevented deleting this project.");
+      }
+
+      setAllProjects(prev => prev.filter(p => p.id !== deletingProject.id));
+      setDeletingProject(null);
+    } catch (err: any) {
+      console.error("Delete project error:", err);
+      setDeleteError(err.message || "Failed to delete project.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   useEffect(() => {
     async function loadProjects() {
@@ -85,19 +115,20 @@ export default function ProjectsListPage() {
               <th className="px-6 py-3">Project Name</th>
               <th className="px-6 py-3">Status</th>
               <th className="px-6 py-3">Description</th>
+              <th className="px-6 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {isLoading ? (
               <tr>
-                <td colSpan={3} className="px-6 py-12 text-center text-slate-500">
+                <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
                   <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                   Loading projects...
                 </td>
               </tr>
             ) : allProjects.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-6 py-12 text-center">
+                <td colSpan={4} className="px-6 py-12 text-center">
                   <div className="bg-slate-50 p-6 rounded-2xl inline-block border border-slate-200">
                     <p className="text-slate-500 font-medium">No projects found in this workspace.</p>
                     <p className="text-sm text-slate-400 mt-1">Create your first transformation project to get started.</p>
@@ -131,12 +162,68 @@ export default function ProjectsListPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-slate-600 text-sm truncate max-w-xs">{proj.description || '—'}</td>
+                  <td className="px-6 py-4 text-right">
+                    <button
+                      onClick={() => setDeletingProject(proj)}
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                      title="Delete Project"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </td>
                 </motion.tr>
               ))
             )}
           </tbody>
         </table>
       </motion.div>
+
+      {/* Delete Project Confirmation Modal */}
+      {deletingProject && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-slate-200"
+          >
+            <h3 className="text-xl font-bold text-slate-900">Delete Project</h3>
+            <p className="text-slate-600 text-sm mt-2">
+              Are you sure you want to delete project <strong>{deletingProject.name}</strong>? All associated blueprints and discovery data will be permanently removed.
+            </p>
+
+            {deleteError && (
+              <div className="mt-4 bg-red-50 text-red-600 text-sm p-3 rounded-xl border border-red-100 font-medium">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="mt-6 flex items-center justify-end space-x-3">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => {
+                  setDeletingProject(null);
+                  setDeleteError(null);
+                }}
+                className="px-4 py-2 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteProject}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-all shadow-md shadow-red-500/20 flex items-center cursor-pointer"
+              >
+                {isDeleting && (
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                )}
+                {isDeleting ? "Deleting..." : "Delete Project"}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
