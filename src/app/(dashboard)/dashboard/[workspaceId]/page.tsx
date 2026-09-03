@@ -122,7 +122,7 @@ export default function WorkspaceDashboard(
             </div>
           ) : (
             recentProjects.map((project) => (
-              <Link href={`/dashboard/${params.workspaceId}/projects/${project.id}`} key={project.id} passHref>
+              <Link href={`/dashboard/projects/${project.id}`} key={project.id} passHref>
                 <motion.div 
                   whileHover={{ backgroundColor: "rgba(248, 250, 252, 1)", x: 4 }}
                   whileTap={{ scale: 0.99 }}

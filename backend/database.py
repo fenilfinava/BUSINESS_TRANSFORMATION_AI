@@ -182,12 +182,22 @@ async def get_all_blueprints(user_id: Optional[str] = None, workspace_id: Option
 async def get_workspace_stats(workspace_id: str) -> Dict[str, Any]:
     client = get_supabase_client()
     try:
-        projects_res = client.table("projects").select("id").eq("workspace_id", workspace_id).execute()
-        active_projects_count = len(projects_res.data) if projects_res.data else 0
+        projects_res = client.table("projects").select("id, status").eq("workspace_id", workspace_id).execute()
+        projects = projects_res.data or []
+        
+        active_projects_count = len([p for p in projects if p.get("status") != "Completed"])
+        completed_milestones = len([p for p in projects if p.get("status") == "Completed"])
+        
+        ai_recommendations = 0
+        if projects:
+            project_ids = [p["id"] for p in projects]
+            blueprints_res = client.table("blueprints").select("id").in_("project_id", project_ids).execute()
+            ai_recommendations = len(blueprints_res.data) if blueprints_res.data else 0
+
         return {
             "active_projects": active_projects_count,
-            "ai_recommendations": 0,
-            "completed_milestones": 0,
+            "ai_recommendations": ai_recommendations,
+            "completed_milestones": completed_milestones,
             "team_members": 1
         }
     except Exception as e:

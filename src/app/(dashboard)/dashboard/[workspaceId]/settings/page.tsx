@@ -5,12 +5,20 @@ import { motion } from "framer-motion";
 import { Save, CheckCircle2, User, Building, Cpu, Shield } from "lucide-react";
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { useWorkspace } from "@/context/WorkspaceContext";
+
+const formatName = (name?: string) => {
+  if (!name) return "";
+  return name.split(" ").map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ");
+};
 
 export default function SettingsPage() {
+  const { activeWorkspace } = useWorkspace();
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [userName, setUserName] = useState("");
+  const [workspaceName, setWorkspaceName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   
   useEffect(() => {
@@ -18,22 +26,62 @@ export default function SettingsPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setUserEmail(user.email || "");
-        setUserName(user.user_metadata?.full_name || "");
+        setUserName(formatName(user.user_metadata?.full_name || ""));
       }
       setIsLoading(false);
     }
     loadUser();
   }, []);
 
-  const handleSave = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (activeWorkspace) {
+      setWorkspaceName(activeWorkspace.name);
+    }
+  }, [activeWorkspace]);
+
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     setSaved(false);
-    setTimeout(() => {
-      setIsSaving(false);
+    setErrorMsg(null);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) throw new Error("No authenticated user.");
+
+      // 1. Update Workspace in Supabase
+      if (activeWorkspace) {
+        const { error: wsError } = await supabase
+          .from('workspaces')
+          .update({ name: workspaceName })
+          .eq('id', activeWorkspace.id)
+          .eq('owner_id', user.id);
+
+        if (wsError) {
+          throw new Error("Workspace save failed: " + wsError.message);
+        }
+      }
+
+      // 2. Update Auth Profile metadata
+      const { error: userError } = await supabase.auth.updateUser({
+        data: { full_name: userName }
+      });
+
+      if (userError) {
+        throw new Error("Profile save failed: " + userError.message);
+      }
+
       setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    }, 800);
+      setTimeout(() => setSaved(false), 4000);
+    } catch (err: any) {
+      console.error("Settings Update Error:", err);
+      setErrorMsg(err.message || "Failed to save changes.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -44,6 +92,11 @@ export default function SettingsPage() {
       </div>
 
       <form onSubmit={handleSave} className="space-y-8">
+        {errorMsg && (
+          <div className="bg-red-50 text-red-600 p-4 rounded-xl font-medium border border-red-100">
+            {errorMsg}
+          </div>
+        )}
         
         {/* User Info Section */}
         <motion.div 
@@ -59,15 +112,15 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">Full Name</label>
-                <input required type="text" value={userName} onChange={e => setUserName(e.target.value)} placeholder="Full Name" className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none" />
+                <input required type="text" value={userName} onChange={e => setUserName(e.target.value)} placeholder="Enter your name" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">Email Address</label>
-                <input required type="email" value={userEmail} disabled className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-100 text-slate-500 cursor-not-allowed transition-all outline-none" />
+                <input required type="email" value={userEmail} disabled className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">Role</label>
-                <input disabled type="text" defaultValue="Enterprise Admin" className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-100 text-slate-500 cursor-not-allowed" />
+                <input disabled type="text" defaultValue="Enterprise Admin" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
           </div>
@@ -88,11 +141,11 @@ export default function SettingsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">Workspace Name</label>
-                <input required type="text" defaultValue="Acme Corp Workspace" className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none" />
+                <input required type="text" value={workspaceName} onChange={e => setWorkspaceName(e.target.value)} placeholder="Workspace Name" className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">Industry Focus</label>
-                <select className="block w-full rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none">
+                <select className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option>Technology</option>
                   <option>Finance</option>
                   <option>Healthcare</option>
@@ -117,7 +170,7 @@ export default function SettingsPage() {
           <div className="p-8 space-y-6">
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2">Default Solution Engine</label>
-              <select className="block w-full max-w-md rounded-xl border border-slate-200 px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none">
+              <select className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option>Enterprise AI Brain (Recommended)</option>
                 <option>Gemini 1.5 Pro</option>
                 <option>Custom Fine-tuned Model</option>

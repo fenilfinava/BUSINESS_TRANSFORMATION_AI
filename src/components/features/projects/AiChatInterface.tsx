@@ -1,0 +1,289 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import { motion } from "framer-motion";
+import { Send, Bot, User, Sparkles, AlertCircle, RefreshCw } from "lucide-react";
+import { createClient } from "@/utils/supabase/client";
+
+interface AiChatInterfaceProps {
+  projectId: string;
+  workspaceId?: string;
+}
+
+interface ChatMessage {
+  role: "ai" | "user";
+  text: string;
+}
+
+export function AiChatInterface({ projectId, workspaceId }: AiChatInterfaceProps) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [projectName, setProjectName] = useState<string>("Project");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Dedicated ref strictly for internal scroll container - NO full-page scrollIntoView!
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // 1. Load project context
+  useEffect(() => {
+    async function loadProject() {
+      if (!projectId) return;
+      const supabase = createClient();
+      const { data: proj } = await supabase
+        .from("projects")
+        .select("name, context_description")
+        .eq("id", projectId)
+        .single();
+
+      if (proj?.name) {
+        setProjectName(proj.name);
+        setMessages([
+          {
+            role: "ai",
+            text: `Hello! I'm your Enterprise Transformation AI Assistant for "${proj.name}". I've reviewed your project scope. What would you like to explore today? We can generate target cloud architectures, evaluate technical risks, or produce execution roadmaps.`,
+          },
+        ]);
+      } else {
+        setMessages([
+          {
+            role: "ai",
+            text: "Hello! I'm your Enterprise Transformation AI Assistant. How can I assist you with this project today?",
+          },
+        ]);
+      }
+    }
+
+    loadProject();
+  }, [projectId]);
+
+  // 2. Strict Internal Container Auto-Scroll (No window-level jumping)
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
+  }, [messages, isGenerating]);
+
+  const handleSendMessage = async (customPrompt?: string) => {
+    const textToSend = customPrompt || input;
+    if (!textToSend.trim() || isGenerating) return;
+
+    setErrorMsg(null);
+    if (!customPrompt) {
+      setInput("");
+    }
+
+    setMessages(prev => [...prev, { role: "user", text: textToSend }]);
+    setIsGenerating(true);
+
+    try {
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const response = await fetch("http://localhost:8000/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: session ? `Bearer ${session.access_token}` : "",
+        },
+        body: JSON.stringify({
+          workspace_id: workspaceId || "default",
+          project_id: projectId,
+          prompt: textToSend,
+          uploaded_documents: [],
+          language: "en",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`AI Engine error: HTTP ${response.status}`);
+      }
+
+      if (!response.body) {
+        throw new Error("No response stream returned from AI server");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let streamBuffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const dataStr = line.slice(6).trim();
+            if (dataStr) {
+              try {
+                const parsed = JSON.parse(dataStr);
+                const messageText =
+                  parsed.message ||
+                  (parsed.module ? `Module ${parsed.module} generated. Check your Solutions tab.` : "");
+
+                if (messageText) {
+                  setMessages(prev => [...prev, { role: "ai", text: messageText }]);
+                }
+              } catch (e) {
+                // Ignore SSE heartbeat or non-JSON lines
+              }
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error("Chat generation error:", err);
+      setErrorMsg(err.message || "Unable to connect to AI generator.");
+      setMessages(prev => [
+        ...prev,
+        {
+          role: "ai",
+          text: "I experienced a connection interruption with the backend AI engine. You can retry your request or verify the Python service is active.",
+        },
+      ]);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const promptChips = [
+    "Design Target Cloud Architecture",
+    "Generate Migration Roadmap",
+    "Analyze Operational Risks & Compliance",
+  ];
+
+  return (
+    <div className="h-[640px] flex flex-col bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+      {/* Chat Header */}
+      <div className="p-4 px-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+            <Bot size={20} />
+          </div>
+          <div>
+            <h3 className="font-bold text-slate-800 text-sm">{projectName} AI Advisor</h3>
+            <p className="text-xs text-slate-500 flex items-center space-x-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Gemini Enterprise Engine Active</span>
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => {
+            setMessages([
+              {
+                role: "ai",
+                text: `Conversation restarted for ${projectName}. How can I help your transformation?`,
+              },
+            ]);
+          }}
+          title="Restart Conversation"
+          className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors"
+        >
+          <RefreshCw size={16} />
+        </button>
+      </div>
+
+      {/* Internal Scrollable Messages Area - Container Scroll Only */}
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/30 scroll-smooth"
+      >
+        {messages.map((msg, idx) => (
+          <div
+            key={idx}
+            className={`flex items-start space-x-3 ${msg.role === "user" ? "flex-row-reverse space-x-reverse" : ""}`}
+          >
+            <div
+              className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                msg.role === "user"
+                  ? "bg-slate-800 text-white"
+                  : "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+              }`}
+            >
+              {msg.role === "user" ? <User size={16} /> : <Bot size={16} />}
+            </div>
+            <div
+              className={`max-w-[78%] rounded-2xl p-4 text-sm leading-relaxed ${
+                msg.role === "user"
+                  ? "bg-blue-600 text-white font-medium rounded-tr-none shadow-sm"
+                  : "bg-white text-slate-800 border border-slate-200/80 rounded-tl-none shadow-sm"
+              }`}
+            >
+              {msg.text}
+            </div>
+          </div>
+        ))}
+
+        {isGenerating && (
+          <div className="flex items-start space-x-3">
+            <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 animate-pulse">
+              <Sparkles size={16} />
+            </div>
+            <div className="bg-white border border-slate-200/80 rounded-2xl rounded-tl-none p-4 shadow-sm flex items-center space-x-2">
+              <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" />
+              <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce [animation-delay:0.2s]" />
+              <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce [animation-delay:0.4s]" />
+              <span className="text-xs text-slate-500 font-semibold pl-2">Synthesizing blueprint...</span>
+            </div>
+          </div>
+        )}
+
+        {errorMsg && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs flex items-center space-x-2">
+            <AlertCircle size={14} />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Suggested Prompts */}
+      <div className="p-3 px-6 bg-white border-t border-slate-100 flex items-center space-x-2 overflow-x-auto">
+        <span className="text-xs font-bold text-slate-400 shrink-0 uppercase tracking-wider">Suggestions:</span>
+        {promptChips.map(chip => (
+          <button
+            key={chip}
+            onClick={() => handleSendMessage(chip)}
+            disabled={isGenerating}
+            className="text-xs whitespace-nowrap bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600 px-3 py-1.5 rounded-lg font-medium transition-all cursor-pointer disabled:opacity-50"
+          >
+            {chip}
+          </button>
+        ))}
+      </div>
+
+      {/* Chat Input */}
+      <div className="p-4 border-t border-slate-100 bg-white">
+        <form
+          onSubmit={e => {
+            e.preventDefault();
+            handleSendMessage();
+          }}
+          className="flex items-center space-x-3"
+        >
+          <input
+            type="text"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            disabled={isGenerating}
+            placeholder={`Ask AI about ${projectName}...`}
+            className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-60"
+          />
+          <button
+            type="submit"
+            disabled={!input.trim() || isGenerating}
+            className="px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold shadow-md shadow-blue-500/20 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 transition-all flex items-center space-x-1 cursor-pointer"
+          >
+            <Send size={16} />
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}

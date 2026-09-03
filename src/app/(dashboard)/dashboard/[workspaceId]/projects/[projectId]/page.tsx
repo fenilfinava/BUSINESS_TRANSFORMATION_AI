@@ -1,21 +1,140 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Activity, Target, Clock, TrendingUp, MessageSquare, Search, Lightbulb } from "lucide-react";
+import { Activity, Target, Clock, TrendingUp, MessageSquare, Search, Lightbulb, FileText, Calendar, AlertCircle } from "lucide-react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { createClient } from "@/utils/supabase/client";
 
 export default function ProjectOverview() {
+  const params = useParams();
+  const projectId = (params?.projectId || params?.id) as string;
+  const workspaceId = (params?.workspaceId as string) || "";
+
+  const [project, setProject] = useState<any>(null);
+  const [blueprintsCount, setBlueprintsCount] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProject = async () => {
+      const supabase = createClient();
+      setIsLoading(true);
+
+      try {
+        // 1. Fetch real project details
+        const { data, error } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('id', projectId)
+          .single();
+
+        if (error) {
+          console.error("Error fetching project:", error);
+        } else {
+          setProject(data);
+
+          // 2. Fetch real blueprint count for this project
+          const { data: blueprints, error: bpError } = await supabase
+            .from('blueprints')
+            .select('id')
+            .eq('project_id', projectId);
+
+          if (!bpError && blueprints) {
+            setBlueprintsCount(blueprints.length);
+          }
+        }
+      } catch (err) {
+        console.error("Unexpected error fetching project:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (projectId) {
+      fetchProject();
+    }
+  }, [projectId]);
+
+  if (isLoading) {
+    return (
+      <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-sm">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-slate-600 font-medium">Loading project workspace...</p>
+      </div>
+    );
+  }
+
+  if (!project) {
+    return (
+      <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 shadow-sm">
+        <AlertCircle size={36} className="text-amber-500 mx-auto mb-3" />
+        <h3 className="text-lg font-bold text-slate-800">Project not found</h3>
+        <p className="text-slate-500 text-sm mt-1">This project may have been moved or removed.</p>
+        <Link href={`/dashboard/${workspaceId || ''}/projects`} className="inline-block mt-4 px-4 py-2 bg-blue-600 text-white font-medium rounded-xl text-sm">
+          Return to Projects
+        </Link>
+      </div>
+    );
+  }
+
+  const createdDate = project.created_at
+    ? new Date(project.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Recently';
+
   const stats = [
-    { label: "Discovery Score", value: "72%", icon: Search, color: "text-emerald-600", bg: "bg-emerald-100" },
-    { label: "AI Insights", value: "18", icon: Lightbulb, color: "text-yellow-600", bg: "bg-yellow-100" },
-    { label: "Project Health", value: "Good", icon: Activity, color: "text-blue-600", bg: "bg-blue-100" },
-    { label: "Days Active", value: "34", icon: Clock, color: "text-purple-600", bg: "bg-purple-100" },
+    { 
+      label: "Project Status", 
+      value: project.status || "In Progress", 
+      icon: Activity, 
+      color: "text-blue-600", 
+      bg: "bg-blue-100" 
+    },
+    { 
+      label: "AI Blueprints", 
+      value: blueprintsCount.toString(), 
+      icon: Lightbulb, 
+      color: "text-yellow-600", 
+      bg: "bg-yellow-100" 
+    },
+    { 
+      label: "Context Status", 
+      value: project.context_description ? "Configured" : "Needs Info", 
+      icon: Target, 
+      color: "text-emerald-600", 
+      bg: "bg-emerald-100" 
+    },
+    { 
+      label: "Created On", 
+      value: createdDate, 
+      icon: Calendar, 
+      color: "text-purple-600", 
+      bg: "bg-purple-100" 
+    },
   ];
 
   const quickActions = [
-    { label: "Start Discovery", desc: "Begin a guided business analysis session", icon: Search, href: "discovery", color: "from-emerald-500 to-teal-600" },
-    { label: "AI Chat", desc: "Ask AI to generate architectures & solutions", icon: MessageSquare, href: "chat", color: "from-blue-500 to-indigo-600" },
-    { label: "View Solutions", desc: "Review AI-generated recommendations", icon: Lightbulb, href: "solutions", color: "from-purple-500 to-pink-600" },
+    { 
+      label: "Start Discovery", 
+      desc: "Begin a guided business analysis session", 
+      icon: Search, 
+      href: `/dashboard/${workspaceId}/projects/${projectId}/discovery`, 
+      color: "from-emerald-500 to-teal-600" 
+    },
+    { 
+      label: "AI Chat", 
+      desc: "Ask AI to generate architectures & solutions", 
+      icon: MessageSquare, 
+      href: `/dashboard/${workspaceId}/projects/${projectId}/chat`, 
+      color: "from-blue-500 to-indigo-600" 
+    },
+    { 
+      label: "View Solutions", 
+      desc: "Review AI-generated recommendations", 
+      icon: Lightbulb, 
+      href: `/dashboard/${workspaceId}/projects/${projectId}/solutions`, 
+      color: "from-purple-500 to-pink-600" 
+    },
   ];
 
   return (
@@ -70,26 +189,42 @@ export default function ProjectOverview() {
         </div>
       </div>
 
-      {/* Info Card */}
+      {/* Project Context & AI Insights */}
       <motion.div 
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}
-        className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-3xl border border-blue-100"
+        className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-3xl border border-blue-100 space-y-4"
       >
         <div className="flex items-start space-x-4">
           <div className="bg-blue-100 p-2.5 rounded-xl text-blue-600 mt-0.5">
             <TrendingUp size={20} />
           </div>
           <div>
-            <h4 className="font-bold text-slate-900">AI Insight</h4>
+            <h4 className="font-bold text-slate-900">Project Context & Architecture Readiness</h4>
             <p className="text-sm text-slate-600 mt-1 leading-relaxed">
-              Based on your discovery data, this project has strong alignment with cloud-native architecture patterns. 
-              Navigate to the <strong className="text-blue-600">AI Chat</strong> to get instant recommendations, 
-              or explore <strong className="text-blue-600">Solutions</strong> to see generated blueprints.
+              {project.context_description ? (
+                <>
+                  <strong className="text-slate-800">Business Objective:</strong> {project.context_description}
+                </>
+              ) : (
+                <>
+                  No specific business context recorded yet. Run a <strong className="text-blue-600">Discovery Session</strong> to feed your strategic objectives into the AI generator.
+                </>
+              )}
             </p>
           </div>
         </div>
+
+        {project.description && (
+          <div className="pt-3 border-t border-blue-100/80 text-sm text-slate-600 flex items-start space-x-3">
+            <FileText size={18} className="text-blue-500 mt-0.5 shrink-0" />
+            <div>
+              <span className="font-semibold text-slate-800">Project Description: </span>
+              {project.description}
+            </div>
+          </div>
+        )}
       </motion.div>
     </div>
   );

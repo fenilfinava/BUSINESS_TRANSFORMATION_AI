@@ -12,18 +12,32 @@ export default function ChatPage() {
   const projectId = params.projectId as string;
   
   const [messages, setMessages] = useState([
-    { role: "ai", text: "Hello! I've reviewed your ERP Cloud Migration project details. What would you like to focus on today? We can design the target cloud architecture or discuss risk mitigation strategies." }
+    { role: "ai", text: "Hello! I've reviewed your project workspace. What would you like to focus on today? We can design target architectures, discuss business transformation, or generate strategic blueprints." }
   ]);
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  useEffect(() => {
+    async function loadProjectContext() {
+      if (!projectId) return;
+      const { data: proj } = await supabase.from('projects').select('name').eq('id', projectId).single();
+      if (proj?.name) {
+        setMessages([
+          { role: "ai", text: `Hello! I've reviewed your ${proj.name} project details. What would you like to focus on today? We can design the target architecture, plan milestones, or generate strategic blueprints.` }
+        ]);
+      }
+    }
+    loadProjectContext();
+  }, [projectId]);
+
+  // Dedicated container ref for internal scrolling only (no window scrollIntoView)
+  const chatScrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    scrollToBottom();
+    if (chatScrollContainerRef.current) {
+      chatScrollContainerRef.current.scrollTop = chatScrollContainerRef.current.scrollHeight;
+    }
   }, [messages]);
 
   const handleGenerate = async (prompt?: string) => {
@@ -122,7 +136,7 @@ export default function ChatPage() {
       </div>
       
       {/* Chat Messages */}
-      <div className="flex-1 p-6 overflow-y-auto space-y-6">
+      <div ref={chatScrollContainerRef} className="flex-1 p-6 overflow-y-auto space-y-6">
         {messages.map((msg, i) => (
           <motion.div 
             key={i}
@@ -153,7 +167,6 @@ export default function ChatPage() {
             </div>
           </motion.div>
         ))}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Input Area */}

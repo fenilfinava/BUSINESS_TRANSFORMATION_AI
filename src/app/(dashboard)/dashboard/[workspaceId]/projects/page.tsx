@@ -115,7 +115,7 @@ export default function ProjectsListPage() {
                   className="transition-colors group"
                 >
                   <td className="px-6 py-4">
-                    <Link href={`/dashboard/${workspaceId}/projects/${proj.id}`} passHref>
+                    <Link href={`/dashboard/projects/${proj.id}`} passHref>
                       <motion.div whileHover={{ x: 4 }} className="font-semibold text-blue-600 group-hover:text-blue-700 cursor-pointer inline-block">
                         {proj.name}
                       </motion.div>

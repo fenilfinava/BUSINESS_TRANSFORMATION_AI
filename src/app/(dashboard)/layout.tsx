@@ -56,7 +56,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       }
     } else if (activeWorkspace?.id) {
       // Auto-redirect if URL has invalid/placeholder workspaceId on /dashboard routes
-      if (pathname.startsWith("/dashboard/") && !pathname.startsWith("/dashboard/history")) {
+      if (
+        pathname.startsWith("/dashboard/") && 
+        !pathname.startsWith("/dashboard/history") &&
+        !pathname.startsWith("/dashboard/projects")
+      ) {
         const cleanSuffix = pathname.replace(/^\/dashboard\/[^/]+/, "");
         router.replace(`/dashboard/${activeWorkspace.id}${cleanSuffix}`);
       }
