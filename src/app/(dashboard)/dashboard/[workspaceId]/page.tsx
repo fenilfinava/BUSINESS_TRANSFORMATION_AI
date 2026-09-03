@@ -5,23 +5,89 @@ import { PlusCircle, Activity, FileText, CheckCircle, Users } from "lucide-react
 import { motion } from "framer-motion";
 import { use, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { TeamInvitations } from "@/components/TeamInvitations";
+import { useWorkspace } from "@/context/WorkspaceContext";
 
 export default function WorkspaceDashboard(
   props: { params: Promise<{ workspaceId: string }> }
 ) {
   const params = use(props.params);
+  const { activeWorkspace } = useWorkspace();
+  const targetWorkspaceId = activeWorkspace?.id || params.workspaceId;
   
+  const [projects, setProjects] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const [stats, setStats] = useState<any>({
     active_projects: 0,
     ai_recommendations: 0,
     completed_milestones: 0,
     team_members: 0
   });
-  const [recentProjects, setRecentProjects] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    async function loadDashboard() {
+    async function loadProjectsDirectly() {
+      setLoading(true);
+      try {
+        // 1. Get current logged-in user
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user) {
+          setErrorMessage("User not authenticated.");
+          setLoading(false);
+          return;
+        }
+
+        // 2. Direct raw fetch from projects table without table joins
+        let loadedProjects: any[] = [];
+        let query = supabase.from('projects').select('*');
+        if (targetWorkspaceId) {
+          query = query.eq('workspace_id', targetWorkspaceId);
+        }
+        const { data, error } = await query.order('created_at', { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          loadedProjects = data;
+        } else {
+          if (error) {
+            console.warn("Supabase direct projects query error, activating resilient backend fallback:", error.message);
+          }
+          // Secondary fallback: fetch projects via backend API to bypass any database recursion errors
+          if (targetWorkspaceId) {
+            const { data: { session } } = await supabase.auth.getSession();
+            try {
+              const res = await fetch(`http://localhost:8000/api/workspaces/${targetWorkspaceId}/projects`, {
+                headers: {
+                  Authorization: session ? `Bearer ${session.access_token}` : ''
+                }
+              });
+              if (res.ok) {
+                const backendProjects = await res.json();
+                if (backendProjects && Array.isArray(backendProjects) && backendProjects.length > 0) {
+                  loadedProjects = backendProjects;
+                }
+              }
+            } catch (fallbackErr) {
+              console.error("Backend projects fallback error:", fallbackErr);
+            }
+          }
+        }
+
+        setProjects(loadedProjects);
+      } catch (err: any) {
+        console.error("UNCAUGHT FETCH EXCEPTION:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadProjectsDirectly();
+  }, [targetWorkspaceId]);
+
+  useEffect(() => {
+    if (!targetWorkspaceId) return;
+
+    async function loadStats() {
       const { data: { session } } = await supabase.auth.getSession();
       const headers: Record<string, string> = {};
       if (session) {
@@ -29,27 +95,22 @@ export default function WorkspaceDashboard(
       }
 
       try {
-        const [statsRes, projectsRes] = await Promise.all([
-          fetch(`http://localhost:8000/api/workspaces/${params.workspaceId}/stats`, { headers }),
-          fetch(`http://localhost:8000/api/workspaces/${params.workspaceId}/projects`, { headers })
-        ]);
-
+        const statsRes = await fetch(`http://localhost:8000/api/workspaces/${targetWorkspaceId}/stats`, { headers });
         if (statsRes.ok) {
           const statsData = await statsRes.json();
-          setStats(statsData);
-        }
-        if (projectsRes.ok) {
-          const projectsData = await projectsRes.json();
-          setRecentProjects(projectsData.slice(0, 3));
+          setStats((prev: any) => ({
+            ...statsData,
+            active_projects: projects.length || statsData.active_projects || 0
+          }));
         }
       } catch (err) {
-        console.error("Dashboard load error:", err);
-      } finally {
-        setIsLoading(false);
+        console.error("Dashboard stats load error:", err);
       }
     }
-    loadDashboard();
-  }, [params.workspaceId]);
+    loadStats();
+  }, [targetWorkspaceId, projects.length]);
+
+  const recentProjects = projects.slice(0, 3);
 
   return (
     <div className="space-y-6">
@@ -69,6 +130,14 @@ export default function WorkspaceDashboard(
           </motion.div>
         </Link>
       </div>
+
+      <TeamInvitations />
+      
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm font-medium">
+          <strong>Database Error:</strong> {errorMessage}
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
