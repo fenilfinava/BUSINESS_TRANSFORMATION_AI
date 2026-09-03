@@ -7,6 +7,7 @@ import { ArrowRight, Sparkles, X, Plus } from 'lucide-react';
 import { AnimatedBackground } from '@/components/common/AnimatedBackground';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useWorkspace } from '@/context/WorkspaceContext';
 
 const COLOR_GRADIENTS = [
   "from-blue-500 to-indigo-600",
@@ -20,45 +21,23 @@ const ICONS = ["🚀", "🏢", "🌐", "⚡", "💎", "✨"];
 
 export default function WorkspacesPage() {
   const router = useRouter();
-  const [workspaces, setWorkspaces] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Live fetching from Supabase
-  useEffect(() => {
-    async function loadWorkspaces() {
-      setIsLoading(true);
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (!session || sessionError) {
-          console.log("No active session found on workspaces page. Redirecting to login...");
-          router.replace('/login');
-          return;
-        }
-
-        const { data, error } = await supabase
-          .from('workspaces')
-          .select('*')
-          .eq('owner_id', session.user.id)
-          .order('created_at', { ascending: false });
-
-        if (error) {
-          console.error("Error fetching workspaces from Supabase:", error);
-        } else if (data) {
-          setWorkspaces(data);
-        }
-      } catch (err) {
-        console.error("Fetch error:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    loadWorkspaces();
-  }, [router]);
+  const { workspaces, isLoadingWorkspaces, setActiveWorkspace, refreshWorkspaces } = useWorkspace();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [name, setName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+
+  // Live session check
+  useEffect(() => {
+    async function checkAuth() {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (!session || sessionError) {
+        console.log("No active session found on workspaces page. Redirecting to login...");
+        router.replace('/login');
+      }
+    }
+    checkAuth();
+  }, [router]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,10 +71,12 @@ export default function WorkspacesPage() {
       setIsModalOpen(false);
       setName("");
 
+      await refreshWorkspaces();
+
       // Dynamic redirection to the real workspace ID
       if (newWs?.id) {
+        setActiveWorkspace(newWs);
         router.replace(`/dashboard/${newWs.id}`);
-        router.refresh();
       }
     } catch (err: any) {
       console.error(err);
@@ -136,7 +117,7 @@ export default function WorkspacesPage() {
           </motion.p>
         </div>
         
-        {isLoading ? (
+        {isLoadingWorkspaces ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[1, 2, 3].map((n) => (
               <div key={n} className="h-64 bg-white/40 backdrop-blur-xl p-8 rounded-3xl border border-white/60 animate-pulse flex flex-col justify-between">
@@ -157,7 +138,7 @@ export default function WorkspacesPage() {
               const role = ws.role || "Admin";
 
               return (
-                <Link key={ws.id} href={`/dashboard/${ws.id}`} passHref className="block h-full">
+                <Link key={ws.id} href={`/dashboard/${ws.id}`} passHref className="block h-full" onClick={() => setActiveWorkspace(ws)}>
                   <motion.div
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}

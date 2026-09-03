@@ -7,12 +7,14 @@ import { LayoutDashboard, FolderKanban, Settings, Users, LogOut, Zap, History } 
 import { PageTransition } from "@/components/common/PageTransition";
 import { supabase } from "@/lib/supabase";
 
+import { useWorkspace } from "@/context/WorkspaceContext";
+
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const params = useParams();
   const pathname = usePathname();
   const workspaceId = (params?.workspaceId as string) || "";
-  const [workspaceName, setWorkspaceName] = useState<string>("Workspace");
+  const { workspaces, activeWorkspace, isLoadingWorkspaces, setActiveWorkspace } = useWorkspace();
   const [userEmail, setUserEmail] = useState<string>("user@example.com");
   const [isAuthChecking, setIsAuthChecking] = useState(true);
 
@@ -40,47 +42,29 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, [router]);
 
   const isValidUUID = (val?: string) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
-  const [resolvedWsId, setResolvedWsId] = useState<string>(workspaceId || "");
 
-  // 2. Fetch Real Workspace Info & Auto-resolve Real UUID if URL has placeholder
+  // 2. Sync URL workspaceId with activeWorkspace in global context
   useEffect(() => {
-    async function loadWorkspaceInfo() {
-      if (isValidUUID(workspaceId)) {
-        setResolvedWsId(workspaceId);
-        try {
-          const { data } = await supabase
-            .from("workspaces")
-            .select("name")
-            .eq("id", workspaceId)
-            .single();
-          if (data?.name) {
-            setWorkspaceName(data.name);
-          }
-        } catch (err) {
-          console.error("Failed to load workspace info:", err);
-        }
-      } else {
-        try {
-          const { data: wsList } = await supabase
-            .from("workspaces")
-            .select("id, name")
-            .order("created_at", { ascending: false })
-            .limit(1);
-          if (wsList && wsList.length > 0 && isValidUUID(wsList[0].id)) {
-            setWorkspaceName(wsList[0].name);
-            setResolvedWsId(wsList[0].id);
-            if (pathname.startsWith("/dashboard/")) {
-              const cleanSuffix = pathname.replace(/^\/dashboard\/[^/]+/, "");
-              router.replace(`/dashboard/${wsList[0].id}${cleanSuffix}`);
-            }
-          }
-        } catch (err) {
-          console.error("Failed to resolve valid workspace:", err);
+    if (isLoadingWorkspaces) return;
+
+    if (isValidUUID(workspaceId)) {
+      if (activeWorkspace?.id !== workspaceId) {
+        const found = workspaces.find((w) => w.id === workspaceId);
+        if (found) {
+          setActiveWorkspace(found);
         }
       }
+    } else if (activeWorkspace?.id) {
+      // Auto-redirect if URL has invalid/placeholder workspaceId on /dashboard routes
+      if (pathname.startsWith("/dashboard/") && !pathname.startsWith("/dashboard/history")) {
+        const cleanSuffix = pathname.replace(/^\/dashboard\/[^/]+/, "");
+        router.replace(`/dashboard/${activeWorkspace.id}${cleanSuffix}`);
+      }
+    } else if (workspaces.length === 0 && !isLoadingWorkspaces) {
+      // No workspaces exist yet, redirect to workspace creation
+      router.replace('/workspaces');
     }
-    loadWorkspaceInfo();
-  }, [workspaceId, pathname, router]);
+  }, [workspaceId, activeWorkspace, workspaces, isLoadingWorkspaces, pathname, router, setActiveWorkspace]);
 
   // 3. Clear Session & Flush Cache on Sign Out
   const handleSignOut = async () => {
@@ -98,7 +82,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     router.refresh();
   };
 
-  if (isAuthChecking) {
+  if (isAuthChecking || isLoadingWorkspaces) {
     return (
       <div className="min-h-screen bg-[#f3f4f6] flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
@@ -106,7 +90,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  const currentWsId = resolvedWsId || (isValidUUID(workspaceId) ? workspaceId : "");
+  const currentWsId = (isValidUUID(workspaceId) ? workspaceId : null) || activeWorkspace?.id || (workspaces.length > 0 ? workspaces[0].id : "");
+  const workspaceName = activeWorkspace?.name || "Workspace";
 
   return (
     <div className="min-h-screen bg-[#f3f4f6] relative flex overflow-hidden">

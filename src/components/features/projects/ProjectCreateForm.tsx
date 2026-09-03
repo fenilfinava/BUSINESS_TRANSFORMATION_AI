@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Rocket } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useWorkspace } from "@/context/WorkspaceContext";
 
 const projectSchema = z.object({
   name: z.string().min(3, { message: "Project name must be at least 3 characters" }),
@@ -19,6 +20,7 @@ type ProjectFormValues = z.infer<typeof projectSchema>;
 export function ProjectCreateForm({ workspaceId }: { workspaceId: string }) {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { activeWorkspace, workspaces } = useWorkspace();
 
   const {
     register,
@@ -39,6 +41,14 @@ export function ProjectCreateForm({ workspaceId }: { workspaceId: string }) {
       
       // Resolve a real workspace UUID if a placeholder or invalid ID was passed
       let targetWsId = workspaceId;
+      if (!isValidUUID(targetWsId)) {
+        if (activeWorkspace?.id && isValidUUID(activeWorkspace.id)) {
+          targetWsId = activeWorkspace.id;
+        } else if (workspaces.length > 0 && isValidUUID(workspaces[0].id)) {
+          targetWsId = workspaces[0].id;
+        }
+      }
+
       if (!isValidUUID(targetWsId)) {
         // 1. Try Supabase
         const { data: wsData } = await supabase.from('workspaces').select('id').order('created_at', { ascending: false }).limit(1);
