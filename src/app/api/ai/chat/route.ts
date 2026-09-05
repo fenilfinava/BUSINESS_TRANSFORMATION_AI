@@ -3,6 +3,9 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { sanitizeError } from "@/utils/errorHandler";
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const apiKey = process.env.GEMINI_API_KEY || "";
 const genAI = new GoogleGenerativeAI(apiKey);
 
