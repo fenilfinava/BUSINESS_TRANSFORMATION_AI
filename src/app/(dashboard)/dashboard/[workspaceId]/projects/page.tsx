@@ -14,7 +14,8 @@ export default function ProjectsListPage() {
   const params = useParams();
   const router = useRouter();
   const { activeWorkspace } = useWorkspace();
-  const workspaceId = activeWorkspace?.id || (params?.workspaceId as string);
+  // Reliably extract workspaceId from URL params first
+  const workspaceId = (params?.workspaceId as string) || activeWorkspace?.id;
 
   const [allProjects, setAllProjects] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,24 +54,24 @@ export default function ProjectsListPage() {
             console.error("Project fetch error:", error.message);
             setErrorMessage(sanitizeError(error.message, "Unable to load projects."));
           }
-          // Secondary fallback: fetch projects via backend API to bypass any database recursion errors
+          // Secondary fallback: fetch projects via Next.js API route to bypass any RLS recursion
           if (workspaceId) {
             const { data: { session } } = await supabase.auth.getSession();
             try {
-              const res = await fetch(`http://localhost:8000/api/workspaces/${workspaceId}/projects`, {
+              const res = await fetch(`/api/projects?workspace_id=${workspaceId}`, {
                 headers: {
                   Authorization: session ? `Bearer ${session.access_token}` : ''
                 }
               });
               if (res.ok) {
-                const backendProjects = await res.json();
-                if (backendProjects && Array.isArray(backendProjects)) {
-                  loadedProjects = backendProjects;
+                const apiProjects = await res.json();
+                if (apiProjects && Array.isArray(apiProjects)) {
+                  loadedProjects = apiProjects;
                   setErrorMessage(null);
                 }
               }
             } catch (fallbackErr) {
-              console.error("Backend projects fallback error:", fallbackErr);
+              console.error("Next.js projects API fallback error:", fallbackErr);
             }
           }
         }

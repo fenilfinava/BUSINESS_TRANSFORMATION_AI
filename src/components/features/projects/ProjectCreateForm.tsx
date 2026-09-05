@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Rocket } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -17,10 +17,14 @@ const projectSchema = z.object({
 
 type ProjectFormValues = z.infer<typeof projectSchema>;
 
-export function ProjectCreateForm({ workspaceId }: { workspaceId: string }) {
+export function ProjectCreateForm({ workspaceId: propWorkspaceId }: { workspaceId?: string }) {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const params = useParams();
   const { activeWorkspace, workspaces } = useWorkspace();
+
+  // Reliably extract workspaceId from URL params first, then props, then global state
+  const workspaceId = (params?.workspaceId as string) || propWorkspaceId || activeWorkspace?.id || "";
 
   const {
     register,
@@ -39,7 +43,7 @@ export function ProjectCreateForm({ workspaceId }: { workspaceId: string }) {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
-      // Resolve a real workspace UUID if a placeholder or invalid ID was passed
+      // Resolve a real workspace UUID
       let targetWsId = workspaceId;
       if (!isValidUUID(targetWsId)) {
         if (activeWorkspace?.id && isValidUUID(activeWorkspace.id)) {
@@ -50,48 +54,14 @@ export function ProjectCreateForm({ workspaceId }: { workspaceId: string }) {
       }
 
       if (!isValidUUID(targetWsId)) {
-        // 1. Try Supabase
-        const { data: wsData } = await supabase.from('workspaces').select('id').order('created_at', { ascending: false }).limit(1);
+        // Query Supabase for any valid workspace
+        const { data: wsData } = await supabase
+          .from('workspaces')
+          .select('id')
+          .order('created_at', { ascending: false })
+          .limit(1);
         if (wsData && wsData.length > 0 && isValidUUID(wsData[0].id)) {
           targetWsId = wsData[0].id;
-        } else {
-          // 2. Try backend workspaces endpoint
-          try {
-            const wsRes = await fetch('http://localhost:8000/api/workspaces', {
-              headers: { 'Authorization': session ? `Bearer ${session.access_token}` : '' }
-            });
-            if (wsRes.ok) {
-              const wsList = await wsRes.json();
-              if (wsList && wsList.length > 0 && isValidUUID(wsList[0].id)) {
-                targetWsId = wsList[0].id;
-              }
-            }
-          } catch (e) {
-            console.warn("Could not list workspaces via backend:", e);
-          }
-
-          // 3. Auto-initialize default workspace if none exists
-          if (!isValidUUID(targetWsId)) {
-            try {
-              console.log("Auto-initializing default workspace...");
-              const createWsRes = await fetch('http://localhost:8000/api/workspaces', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': session ? `Bearer ${session.access_token}` : ''
-                },
-                body: JSON.stringify({ name: "Default Transformation Workspace" })
-              });
-              if (createWsRes.ok) {
-                const newWs = await createWsRes.json();
-                if (newWs && isValidUUID(newWs.id)) {
-                  targetWsId = newWs.id;
-                }
-              }
-            } catch (createErr) {
-              console.error("Auto-creation of workspace failed:", createErr);
-            }
-          }
         }
       }
 
@@ -102,7 +72,8 @@ export function ProjectCreateForm({ workspaceId }: { workspaceId: string }) {
         return;
       }
       
-      const res = await fetch('http://localhost:8000/api/projects', {
+      // Primary: Post to Next.js API route /api/projects (runs everywhere on Vercel)
+      const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -110,23 +81,39 @@ export function ProjectCreateForm({ workspaceId }: { workspaceId: string }) {
         },
         body: JSON.stringify({ ...data, workspace_id: targetWsId })
       });
+
       if (res.ok) {
         const createdProject = await res.json();
-        console.log("Successfully created project with real UUID:", createdProject.id);
+        console.log("Successfully created project:", createdProject.id);
         router.replace(`/dashboard/${targetWsId}`);
         router.refresh();
-      } else {
-        const errorData = await res.json();
-        console.error("FastAPI Rejection Details:", errorData);
-        
-        const errorMessage = Array.isArray(errorData.detail) 
-          ? errorData.detail.map((e: any) => `${e.loc.join('.')}: ${e.msg}`).join(', ') 
-          : (errorData.detail || errorData.message || "Unknown backend error");
-        
-        alert(`Failed: ${errorMessage}`);
+        return;
       }
-    } catch (err) {
-      console.error(err);
+
+      // Secondary fallback: Direct Supabase insert
+      const { data: inserted, error: insertError } = await supabase
+        .from('projects')
+        .insert({
+          name: data.name.trim(),
+          description: data.description.trim(),
+          workspace_id: targetWsId
+        })
+        .select()
+        .single();
+
+      if (!insertError && inserted) {
+        console.log("Created project via direct Supabase insert:", inserted.id);
+        router.replace(`/dashboard/${targetWsId}`);
+        router.refresh();
+        return;
+      }
+
+      const errorData = await res.json().catch(() => ({}));
+      const errorMessage = errorData.error || errorData.detail || insertError?.message || "Failed to create project";
+      alert(`Failed: ${errorMessage}`);
+    } catch (err: any) {
+      console.error("Project creation error:", err);
+      alert(`Error: ${err.message || "Failed to create project"}`);
     } finally {
       setIsLoading(false);
     }

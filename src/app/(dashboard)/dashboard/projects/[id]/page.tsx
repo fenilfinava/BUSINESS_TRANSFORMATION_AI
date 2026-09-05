@@ -84,9 +84,9 @@ export default function ProjectDetailsPage() {
         if (!error && data) {
           loadedProject = data;
         } else {
-          console.warn("Direct Supabase project fetch error, trying backend fallback:", error?.message);
+          console.warn("Direct Supabase project fetch error, trying API fallback:", error?.message);
           const { data: { session } } = await supabase.auth.getSession();
-          const res = await fetch(`http://localhost:8000/api/projects/${projectId}`, {
+          const res = await fetch(`/api/projects/${projectId}`, {
             headers: {
               Authorization: session ? `Bearer ${session.access_token}` : ''
             }

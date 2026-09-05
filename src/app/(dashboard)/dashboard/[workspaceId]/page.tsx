@@ -14,7 +14,8 @@ export default function WorkspaceDashboard(
 ) {
   const params = use(props.params);
   const { activeWorkspace } = useWorkspace();
-  const targetWorkspaceId = activeWorkspace?.id || params.workspaceId;
+  // Reliably extract workspaceId from URL params first
+  const targetWorkspaceId = params.workspaceId || activeWorkspace?.id;
   
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,25 +52,25 @@ export default function WorkspaceDashboard(
           loadedProjects = data;
         } else {
           if (error) {
-            console.warn("Supabase direct projects query error, activating resilient backend fallback:", error.message);
+            console.warn("Supabase direct projects query error, activating resilient API fallback:", error.message);
           }
-          // Secondary fallback: fetch projects via backend API to bypass any database recursion errors
+          // Secondary fallback: fetch projects via Next.js API route to bypass any database recursion errors
           if (targetWorkspaceId) {
             const { data: { session } } = await supabase.auth.getSession();
             try {
-              const res = await fetch(`http://localhost:8000/api/workspaces/${targetWorkspaceId}/projects`, {
+              const res = await fetch(`/api/projects?workspace_id=${targetWorkspaceId}`, {
                 headers: {
                   Authorization: session ? `Bearer ${session.access_token}` : ''
                 }
               });
               if (res.ok) {
-                const backendProjects = await res.json();
-                if (backendProjects && Array.isArray(backendProjects) && backendProjects.length > 0) {
-                  loadedProjects = backendProjects;
+                const apiProjects = await res.json();
+                if (apiProjects && Array.isArray(apiProjects) && apiProjects.length > 0) {
+                  loadedProjects = apiProjects;
                 }
               }
             } catch (fallbackErr) {
-              console.error("Backend projects fallback error:", fallbackErr);
+              console.error("Next.js projects fallback error:", fallbackErr);
             }
           }
         }

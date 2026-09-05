@@ -55,7 +55,7 @@ export default function TeamPage() {
         } else {
           // Fallback to backend API if direct query returns empty
           const { data: { session } } = await supabase.auth.getSession();
-          const res = await fetch(`http://localhost:8000/api/workspaces/${workspaceId}/projects`, {
+          const res = await fetch(`/api/projects?workspace_id=${workspaceId}`, {
             headers: {
               Authorization: session ? `Bearer ${session.access_token}` : ''
             }

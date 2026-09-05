@@ -89,7 +89,7 @@ export default function ModulesPage() {
 
         // If workspaceId is a valid UUID, fetch from workspace endpoint
         if (isValidUUID(workspaceId)) {
-          const res = await fetch(`http://localhost:8000/api/workspaces/${workspaceId}/projects`, {
+          const res = await fetch(`/api/projects?workspace_id=${workspaceId}`, {
             headers: { 'Authorization': `Bearer ${session.access_token}` }
           });
           if (res.ok) {
